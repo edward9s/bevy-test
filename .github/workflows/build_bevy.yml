@@ -1,0 +1,92 @@
+name: Persistent Bevy dependencies
+on:
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Rebuild the exact dependency key
+        type: boolean
+        default: false
+  push:
+    branches: [main]
+    paths: [Cargo.toml, Cargo.lock, rust-toolchain.toml, scripts/android-env.sh, scripts/dependency_key.py, scripts/dependencies.sh, .github/workflows/build_bevy.yml]
+  workflow_call:
+    inputs:
+      force:
+        type: boolean
+        default: false
+    outputs:
+      tag:
+        value: ${{ jobs.dependencies.outputs.tag }}
+permissions:
+  contents: write
+concurrency:
+  group: bevy-dependencies-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  dependencies:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    outputs:
+      tag: ${{ steps.key.outputs.tag }}
+    env:
+      CARGO_BUILD_JOBS: 2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.98.0
+          targets: aarch64-linux-android
+      - name: Install pinned Android NDK
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'ndk;28.2.13676358'
+          source scripts/android-env.sh
+      - name: Dependency identity
+        id: key
+        run: echo "tag=$(python3 scripts/dependency_key.py)" >> "$GITHUB_OUTPUT"
+      - name: Download durable dependency archive
+        id: restore
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.key.outputs.tag }}
+          FORCE: ${{ inputs.force || false }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/dependencies"
+          if [[ "$FORCE" != true ]] && gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern 'deps.*' --dir "$RUNNER_TEMP/dependencies"
+            bash scripts/dependencies.sh restore "$RUNNER_TEMP/dependencies"
+            echo 'hit=true' >> "$GITHUB_OUTPUT"
+          else
+            if [[ "$GITHUB_REF" != refs/heads/main ]]; then
+              echo '::error::Build the dependency release from main before using this dependency key on another branch.'
+              exit 1
+            fi
+            echo 'hit=false' >> "$GITHUB_OUTPUT"
+          fi
+      - name: Compile dependencies with the application's exact release profile
+        if: steps.restore.outputs.hit != 'true'
+        run: |
+          set -euo pipefail
+          cp src/lib.rs "$RUNNER_TEMP/original-lib.rs"
+          trap 'cp "$RUNNER_TEMP/original-lib.rs" src/lib.rs' EXIT
+          printf 'pub fn warm() { let _ = bevy::prelude::App::new(); }\n' > src/lib.rs
+          cargo build --locked --release --lib --target aarch64-linux-android
+          bash scripts/dependencies.sh pack "$RUNNER_TEMP/dependencies"
+      - name: Save durable dependency release
+        if: steps.restore.outputs.hit != 'true' && github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.key.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            while IFS= read -r asset; do
+              gh release delete-asset "$TAG" "$asset" --yes --repo "$GITHUB_REPOSITORY"
+            done < <(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name | select(startswith("deps."))')
+            gh release upload "$TAG" "$RUNNER_TEMP"/dependencies/deps.* --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" "$RUNNER_TEMP"/dependencies/deps.* --repo "$GITHUB_REPOSITORY" \
+              --title "Bevy dependency archive $TAG" \
+              --notes "Dependency source commit: $GITHUB_SHA. Pinned Rust + Cargo.lock + Android NDK + target + release profile. Keep this release for durable reuse. The tag is anchored at the default branch head; archive identity is the dependency key." \
+              --prerelease --latest=false
+          fi

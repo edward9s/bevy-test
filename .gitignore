@@ -1,0 +1,7 @@
+/target/
+/.deps/
+/assets/generated/
+/build/
+*.jks
+*.p12
+__pycache__/

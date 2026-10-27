@@ -1,0 +1,91 @@
+name: Validate forest port
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: bevy-check-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_BUILD_JOBS: 2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.98.0
+          components: rustfmt, clippy
+      - name: Linux render dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y libx11-dev libxkbcommon-dev libvulkan1 mesa-vulkan-drivers
+      - uses: actions/cache/restore@v4
+        id: rust-cache
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: desktop-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'rust-toolchain.toml') }}-${{ github.sha }}
+          restore-keys: desktop-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'rust-toolchain.toml') }}-
+      - name: Rust checks
+        run: |
+          cargo fmt --all --check
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo test --locked --lib resolution::tests
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/cache@v4
+        with:
+          path: |
+            .deps
+            assets/generated
+          key: forest-assets-${{ hashFiles('vendor/**', 'scripts/prepare_scene.py', 'scripts/export_geometry.cpp', 'scripts/environment.py', 'scripts/requirements.txt', 'assets/sources.json') }}
+      - name: Verify source geometry and textures
+        run: |
+          pip install -r scripts/requirements.txt
+          if [[ ! -f assets/generated/specular.dds ]]; then python3 scripts/prepare_scene.py; fi
+          python3 scripts/check_assets.py
+      - name: Compile and render all material pipelines
+        env:
+          WGPU_BACKEND: vulkan
+          BEVY_ASSET_ROOT: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          cargo build --locked --bin bevy-forest
+          timeout 600s target/debug/bevy-forest --profile --capture=build/forest.png 2>&1 | tee build/render.log
+          test -s build/forest.png
+          if grep -E 'ERROR|panicked|Shader.*error|Validation Error' build/render.log; then exit 1; fi
+      - name: Render through startup, portrait and adaptive target resizes
+        env:
+          WGPU_BACKEND: vulkan
+          BEVY_ASSET_ROOT: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          timeout 600s target/debug/bevy-forest --check-resize --capture=build/resized.png 2>&1 | tee build/resize.log
+          test -s build/resized.png
+          if grep -E 'ERROR|panicked|Shader.*error|Validation Error' build/resize.log; then exit 1; fi
+          for size in 1280x800 800x1280 800x480 960x540; do
+            grep -F "Scene resolution: $size" build/resize.log
+          done
+      - uses: actions/cache/save@v4
+        if: always() && steps.rust-cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: desktop-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'rust-toolchain.toml') }}-${{ github.sha }}
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: forest-render
+          path: build/
+          retention-days: 7

@@ -1,0 +1,106 @@
+name: Android test build
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Collect GPU timings (adds profiling overhead)
+        type: boolean
+        default: false
+permissions:
+  contents: write
+concurrency:
+  group: bevy-android
+  cancel-in-progress: false
+jobs:
+  signing:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Validate configured signing identity before compiling
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          for variable in KEYSTORE_BASE64 STORE_PASSWORD KEY_ALIAS KEY_PASSWORD; do
+            if [[ -z "${!variable}" ]]; then echo "::error::Missing repository secret: $variable"; exit 1; fi
+          done
+  dependencies:
+    needs: signing
+    uses: ./.github/workflows/build_bevy.yml
+  android:
+    needs: dependencies
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CARGO_BUILD_JOBS: 2
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: 1.98.0
+          targets: aarch64-linux-android
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Android SDK and pinned NDK
+        run: |
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" 'platforms;android-35' 'build-tools;35.0.0' 'ndk;28.2.13676358'
+          source scripts/android-env.sh
+      - name: Restore matching compiled dependencies
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_TAG: ${{ needs.dependencies.outputs.tag }}
+        run: |
+          set -euo pipefail
+          test "$(python3 scripts/dependency_key.py)" = "$EXPECTED_TAG"
+          mkdir -p "$RUNNER_TEMP/dependencies"
+          gh release download "$EXPECTED_TAG" --repo "$GITHUB_REPOSITORY" --pattern 'deps.*' --dir "$RUNNER_TEMP/dependencies"
+          bash scripts/dependencies.sh restore "$RUNNER_TEMP/dependencies"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/cache@v4
+        with:
+          path: |
+            .deps
+            assets/generated
+          key: forest-assets-${{ hashFiles('vendor/**', 'scripts/prepare_scene.py', 'scripts/export_geometry.cpp', 'scripts/environment.py', 'scripts/requirements.txt', 'assets/sources.json') }}
+      - name: Generate identical forest geometry and prefiltered assets
+        run: |
+          pip install -r scripts/requirements.txt
+          if [[ ! -f assets/generated/specular.dds ]]; then python3 scripts/prepare_scene.py; fi
+          python3 scripts/check_assets.py
+      - name: Build optimized native library
+        env:
+          BEVY_PROFILE: ${{ inputs.profile && '1' || '0' }}
+        run: cargo build --locked --release --lib --target aarch64-linux-android
+      - name: Package and verify configured release signature
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: bash scripts/package_android.sh
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BevyForest-arm64
+          path: build/BevyForest-test-arm64.apk
+          if-no-files-found: error
+          retention-days: 7
+      - name: Replace rolling test build
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=test-build
+          apk=build/BevyForest-test-arm64.apk
+          notes="Bevy 0.20.0 forest test, adaptive 3D resolution with native UI, release arm64. GPU profiling: ${{ inputs.profile }}. Commit $GITHUB_SHA. Dependency archive: ${{ needs.dependencies.outputs.tag }}. Workflow: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$tag" "$apk" --clobber --repo "$GITHUB_REPOSITORY"
+            gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --target main --title "Bevy forest test #$GITHUB_RUN_NUMBER" --notes "$notes" --prerelease --latest=false
+          else
+            gh release create "$tag" "$apk" --repo "$GITHUB_REPOSITORY" --title "Bevy forest test #$GITHUB_RUN_NUMBER" --notes "$notes" --prerelease --latest=false
+          fi

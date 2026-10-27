@@ -1,0 +1,74 @@
+[
+  {
+    "name": "ground_albedo",
+    "asset": "forrest_ground_01",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/forrest_ground_01/forrest_ground_01_diff_1k.jpg",
+    "sha256": "3dd6875cb3908e022a3c45ebbffa5e84c670ff2691fbbb6dc9ea4bff88523800"
+  },
+  {
+    "name": "ground_normal",
+    "asset": "forrest_ground_01",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/forrest_ground_01/forrest_ground_01_nor_gl_1k.jpg",
+    "sha256": "32528a7cdee962cc0b248ee4023a74d0df175737ea90e1eb425122351e0bdab4"
+  },
+  {
+    "name": "ground_arm",
+    "asset": "forrest_ground_01",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/forrest_ground_01/forrest_ground_01_arm_1k.jpg",
+    "sha256": "22eb09a2ed951377f339c08be9f1665f0db7391ed9ba0b0e91e55aea2dbef315"
+  },
+  {
+    "name": "stone_albedo",
+    "asset": "mossy_rock",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/mossy_rock/mossy_rock_diff_1k.jpg",
+    "sha256": "4dbf37f1b0465c9c8914213163923be159716f5b97fb6946437b6c5e143ef540"
+  },
+  {
+    "name": "stone_normal",
+    "asset": "mossy_rock",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/mossy_rock/mossy_rock_nor_gl_1k.jpg",
+    "sha256": "232cdd6a9fdfd01bb8bb1f8f604c53dbca79fa0d3d7995edf85c9945757aa8df"
+  },
+  {
+    "name": "stone_arm",
+    "asset": "mossy_rock",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/mossy_rock/mossy_rock_arm_1k.jpg",
+    "sha256": "1c1b8da603c93e863ccb68a8f4fcc6ff02774b83d9a6e9422c7d4aa77397b6a3"
+  },
+  {
+    "name": "bark_albedo",
+    "asset": "bark_brown_02",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/bark_brown_02/bark_brown_02_diff_1k.jpg",
+    "sha256": "920fa0bed0c9d78c1d530e99795113afd532d7db746de440f4a85d7c83ed0f1a"
+  },
+  {
+    "name": "bark_normal",
+    "asset": "bark_brown_02",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/bark_brown_02/bark_brown_02_nor_gl_1k.jpg",
+    "sha256": "0d5e691e8ad8bcd093a3587887fda2a6b4a948b5708a4f256f7919584c6eb857"
+  },
+  {
+    "name": "bark_arm",
+    "asset": "bark_brown_02",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Textures/jpg/1k/bark_brown_02/bark_brown_02_arm_1k.jpg",
+    "sha256": "6bd86d37b3b9b40cc30a4b661e382ec41fa7463a8b1144ff44708b19fa675af1"
+  },
+  {
+    "name": "environment",
+    "asset": "forest_slope",
+    "url": "https://dl.polyhaven.org/file/ph-assets/HDRIs/hdr/1k/forest_slope_1k.hdr",
+    "sha256": "926a6bb81897919b2924f42407162b8d54be91eab2da3fe7fe19daf308cfa09a"
+  },
+  {
+    "name": "canopy",
+    "asset": "pine_tree_01",
+    "url": "https://dl.polyhaven.org/file/ph-assets/Models/png/1k/pine_tree_01/pine_tree_01_twig_diff_1k.png",
+    "sha256": "d02c031de64b8ad671f3dd0da19870fa4783d912ae6674aeab0702871deeaeaa",
+    "crop": [
+      16,
+      32,
+      222,
+      450
+    ]
+  }
+]

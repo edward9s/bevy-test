@@ -1,0 +1,34 @@
+[package]
+name = "bevy-forest"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[[bin]]
+name = "bevy-forest"
+path = "src/main.rs"
+
+[dependencies]
+bevy = { version = "=0.20.0", default-features = false, features = [
+  "std", "async_executor", "multi_threaded", "bevy_asset", "bevy_log",
+  "bevy_winit", "x11", "3d_bevy_render", "ui_bevy_render", "default_font",
+  "png", "jpeg", "hdr", "dds", "tonemapping_luts", "zstd_rust"
+] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+bevy = { version = "=0.20.0", default-features = false, features = ["android-native-activity"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = "debuginfo"
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
