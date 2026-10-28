@@ -129,9 +129,7 @@ fn vertex(input: Vertex) -> Output {
     return out;
 }
 fn hash(p: vec2<f32>) -> f32 {
-    var h=fract(vec3(p.x,p.y,p.x)*0.1031);
-    h+=vec3(dot(h,h.yzx+vec3(33.33)));
-    return fract((h.x+h.y)*h.z);
+    return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);
 }
 fn noise(p: vec2<f32>) -> f32 {
     let i=floor(p); var f=fract(p); f=f*f*(3.0-2.0*f);

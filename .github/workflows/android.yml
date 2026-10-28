@@ -2,6 +2,14 @@ name: Android test build
 on:
   workflow_dispatch:
     inputs:
+      fixed_resolution:
+        description: 'Native 100% scene resolution (unchecked: Auto 65-100%)'
+        type: boolean
+        default: true
+      vsync:
+        description: 'Request VSync (unchecked: request uncapped presentation)'
+        type: boolean
+        default: false
       profile:
         description: Collect GPU timings (adds profiling overhead)
         type: boolean
@@ -76,6 +84,8 @@ jobs:
       - name: Build optimized native library
         env:
           BEVY_PROFILE: ${{ inputs.profile && '1' || '0' }}
+          BEVY_VSYNC: ${{ inputs.vsync && '1' || '0' }}
+          BEVY_FIXED_RESOLUTION: ${{ inputs.fixed_resolution && '1' || '0' }}
         run: cargo build --locked --release --lib --target aarch64-linux-android
       - name: Package and verify configured release signature
         env:
@@ -97,7 +107,21 @@ jobs:
           set -euo pipefail
           tag=test-build
           apk=build/BevyForest-test-arm64.apk
-          notes="Bevy 0.20.0 forest test, adaptive 3D resolution with native UI, release arm64. GPU profiling: ${{ inputs.profile }}. Commit $GITHUB_SHA. Dependency archive: ${{ needs.dependencies.outputs.tag }}. Workflow: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          notes="Bevy 0.20.0 forest test, 1024 textures, 4 x 2048 shadows, MSAA 2x/4x, release arm64.
+          Fixed Native 100%: ${{ inputs.fixed_resolution }} (false = Auto 65-100%, whole-frame budget).
+          VSync requested: ${{ inputs.vsync }}. GPU profiling: ${{ inputs.profile }}. Backend: Vulkan.
+          Commit $GITHUB_SHA. Dependency archive: ${{ needs.dependencies.outputs.tag }}.
+          Workflow: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+          SHA-256: $(sha256sum "$apk" | cut -d ' ' -f1)"
+          {
+            echo '## Evaluation settings'
+            echo '- Native 100% fixed: ${{ inputs.fixed_resolution }} (false = Auto 65-100%, whole-frame budget)'
+            echo '- VSync requested: ${{ inputs.vsync }} (tap FPS to change at runtime)'
+            echo '- GPU profiling: ${{ inputs.profile }}'
+            echo '- Backend: Vulkan'
+            echo "- Commit: $GITHUB_SHA"
+            echo "- APK SHA-256: $(sha256sum "$apk" | cut -d ' ' -f1)"
+          } >> "$GITHUB_STEP_SUMMARY"
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$tag" "$apk" --clobber --repo "$GITHUB_REPOSITORY"
             gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --target main --title "Bevy forest test #$GITHUB_RUN_NUMBER" --notes "$notes" --prerelease --latest=false

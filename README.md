@@ -2,29 +2,37 @@
 
 以 **Bevy 0.20.0** 移植 [godot-test](https://github.com/edward9s/godot-test) 的森林與廢墟展示場景，提供 Android arm64 release APK 及桌面測試入口。
 
-基準來源固定在 godot-test [`aee8e9cadd7089ff9450d220a2fc2958f55b5705`](https://github.com/edward9s/godot-test/tree/aee8e9cadd7089ff9450d220a2fc2958f55b5705)。目標是相近畫面下的 Android 效能。保留相同種子、地形、樹木、草葉、石牆及 385,622 個三角形／232 個空間批次；貼圖縮為 512²，陰影與抗鋸齒採較輕的設定。引擎的 PBR、陰影濾波與 ACES 實作不同，畫面須以同裝置截圖比較；實機回報的上一版只有約 4 FPS，尚未量得新版實機 FPS。
+基準來源固定在 godot-test [`aee8e9cadd7089ff9450d220a2fc2958f55b5705`](https://github.com/edward9s/godot-test/tree/aee8e9cadd7089ff9450d220a2fc2958f55b5705)。目標是相近畫面下的 Android 效能。保留相同種子、地形、樹木、草葉、石牆及 385,622 個三角形／232 個空間批次。畫質基準採螢幕原生解析度、1024² 貼圖、四級 2048² 陰影與至少 2× MSAA，對照 Godot Android Mobile 的 1K 貼圖、4096² 四分割陰影 atlas 與 2× MSAA。引擎的 PBR、陰影濾波與 ACES 實作仍有差異，須以同裝置、同解析度、相同視角的畫面確認接近程度，再比較穩態 FPS。
 
 ![Bevy forest preview](docs/forest-preview.jpg)
 
-上圖為 512 貼圖、兩級 1024 陰影、FXAA 的固定時間點渲染：960×540 的 3D 畫面放大至 1280×720，文字介面以輸出原生尺寸繪製。截圖啟用 GPU 診斷，圖中的 FPS 來自 CI 軟體 Vulkan，不代表手機效能。完整 PNG 與 log 請查看最新 `forest-render` artifact。
+上圖為原生 1280×720、1024² 貼圖、四級 2048² 陰影與至少 2× MSAA 的固定時間點渲染。圖中的 FPS 來自軟體 Vulkan，不代表手機效能。完整 PNG 與 log 請查看最新 `forest-render` artifact。
+
+Godot 4.7.2 Mobile 參考（相同 1280×720 Native 100%、視角與特效時間 38.52 秒；植被風動仍正常執行）：
+
+![Godot Mobile reference](docs/godot-mobile-reference.jpg)
+
+兩張截圖用於檢查細節、色調與霧色。PBR、透明材質與陰影濾波仍有引擎差異；軟體渲染的兩個 FPS 數字也無法代替平板 release 實測。ACES 對照來源為 Godot 4.7.2 的 [tone mapping shader](https://github.com/godotengine/godot/blob/4.7.2-stable/servers/rendering/renderer_rd/shaders/effects/tonemap.glsl) 與 [white point calculation](https://github.com/godotengine/godot/blob/4.7.2-stable/servers/rendering/storage/environment_storage.cpp)。
 
 ## 畫面與操作
 
 - 同樣的 52° 視角、起始位置、日照方向與固定曝光。
 - 石牆／地面／樹皮的 albedo、normal、AO／roughness 貼圖；樹冠 alpha cutout、草葉紋理與透光。
 - 完整植被風動，同一份頂點變形套用到顯示與陰影 pass。
-- 兩級 40 m 太陽陰影，1024²／級與硬體 2×2 PCF；近級涵蓋 18 m，包含初始相機前的主要遺跡。深度貼圖總 texel 數從 16,777,216 降至 2,097,152，並將 4× MSAA 改為 FXAA。代價是較粗的陰影邊緣與不同的抗鋸齒效果。
+- 四級 48 m 太陽陰影，2048²／級與 Gaussian PCF；分割距離 5.76、18.24、31.2、48 m 與 Godot 的 0.12／0.38／0.65／1.0 比例一致。保留完整植被陰影與風動，2× MSAA 平滑幾何邊緣；HDR 或深度格式不支援 2× 的裝置使用 4×，HUD 顯示實際取樣數。
 - 同位置、數量與週期的火焰、爆炸、噴濺、閃電、濃煙、流水；三個動態點光源照亮鄰近物體。
 - HDR 森林天空、預先卷積的漫反射／GGX 環境光、霧與 bloom。流水保留波紋、Fresnel 透明度及森林的一次性局部反射擷取；擷取完成後刪除六個額外攝影機。
+- HDR panorama 使用 Godot 的世界座標方向，並補償 Bevy cube lookup 的 Z 反轉；天空、漫反射與鏡面環境光採同一方向，離線測試驗證四個水平軸。
+- ACES 補齊 Godot 的 1.8 倍輸入偏移與白點正規化，實體攝影機曝光保持 0.65。可見天空另套用參考版的固定霧色混合，照明用環境貼圖保持無霧。
 - 單指／滑鼠左鍵拖曳旋轉、兩指捏合／滾輪縮放。
 - 左上 FPS、平均 frame time、特效 CPU 耗時。GPU 診斷預設關閉，避免量測本身的負擔；勾選 Android workflow 的 `profile`，或桌面加上 `--profile`，可顯示最慢 GPU render pass 的耗時／名稱。不支援 timestamp query 時顯示 unavailable。這個數字是單一 pass，不能當成整幀 GPU 時間；啟用診斷的 FPS 應與關閉時分開比較。
 - 點擊首行切換無垂直同步上限／VSync；點擊第四行切換陰影開關，供同裝置即時比較。正常展示預設有陰影。顯示 `Warming reflection` 時仍在初次反射擷取，請等 `Ready` 後比較穩態 FPS。
 
-預設使用 **Auto 內部渲染解析度**，以人眼覺得相近的畫面優先爭取速度。3D 場景、HDR、bloom、FXAA 都在較小的 render target 執行，再以線性取樣放大；文字與介面由另一個攝影機以螢幕原生解析度繪製。左上顯示實際 3D 尺寸與相對螢幕的線性百分比；貼圖尺寸與這個比例分開。
+介面固定使用螢幕原生解析度，3D 場景由 `fixed_resolution` 編譯選項決定。預設勾選為 **Native 100%**：2560×1600 的平板即以 2560×1600 渲染，沒有長邊上限。不勾選為 **Auto 65～100%**：以原生尺寸為上限、每軸 5% 階梯調整，保留原生介面與全部貼圖、陰影及特效設定。Android surface 尚未就緒時先使用 1280×720，取得非零的實際螢幕尺寸後立即同步。
 
-初始長邊取螢幕的 75%，限制在 960～1280 像素；比 960 小的螢幕直接使用原尺寸。完成載入與反射後才調整：持續低於約 50 FPS 時逐步降至長邊 960，持續超過約 71 FPS 時逐步恢復細節，上限仍為長邊 1280。每次變動間隔至少兩秒，避免頻繁重建目標與清晰度跳動。這是畫質調節，無上限模式仍不鎖 FPS；陰影、風動、動態光與水面反射保持啟用。
+Auto 在資產與反射完成後等待 2 秒，以至少 8 幀、0.5 秒的平均整幀間隔決策；大於 18 ms 降一階、小於 12.5 ms 升一階，改尺寸後等待 1 秒。此模式不啟用 GPU profiling；整幀間隔包含 CPU 與呈現等待，因此 CPU 瓶頸或低刷新率限制也可能降低比例。這與 Godot 的 GPU 耗時控制器不同，不能把兩版 Auto 視為相同工作量。HUD 與 log 顯示實際模式、尺寸與比例；同解析度評測請三者都使用 Native 100%。離屏參考擷取固定採 Native，避免軟體驅動的低 FPS 改變畫質基準。
 
-例如 2560×1600 螢幕初始以 1280×800 渲染 3D，每幀場景像素數降至四分之一；介面仍是 2560×1600。代價是場景細節較柔和，品質下限仍需以實機觀感判斷。軟體 Vulkan 的 CI 渲染只用來檢查 shader／資產／渲染流程，不作手機效能數據。
+比較 Godot 時，點擊其 FPS 按鈕切至 `Native 100%`，並確認兩者都完成材質載入與反射擷取。關閉陰影或啟用 GPU profiling 的結果應分開記錄。軟體 Vulkan 只用來驗證資產、shader 與渲染流程；同裝置實測前不宣稱此畫質設定的 FPS 勝負。
 
 ## 執行時效能設計
 
@@ -34,8 +42,8 @@
 - 建立所有批次的 bounds 後，靜態森林 mesh 只保留在 render world，釋放不再使用的 CPU 幾何副本。
 - 植被與粒子運動由 GPU 執行，固定粒子拓樸；CPU 只計算粒子中心來排序透明度、更新三個點光源與不可見特效的開關；每組只上傳排序索引，不逐幀重建 mesh。CPU 光源與粒子排序和 GPU 使用同一個循環時鐘，避免長時間執行後不同步。
 - 已完全透明的爆炸／閃電批次停繪，光源不增加陰影 pass。
-- PBR 貼圖為 512²，包含完整離線 mipmap 與 4× anisotropic filtering。支援 ASTC 的 GPU 直接使用原生 ASTC 4×4 KTX2；其他 GPU 使用 RGBA8 DDS。兩種格式的 PBR GPU 紋理資料都降至前版的約四分之一，HDR 環境貼圖維持原尺寸；沒有執行時轉碼。
-- 火焰、爆炸與煙霧先剔除必定透明的片段，再計算雜訊；雜訊 hash 改用乘加運算，保留三層流動紋理但改變細部花紋。
+- PBR 與樹冠貼圖保留來源 1024² 尺寸、完整 11 層離線 mipmap 與 4× anisotropic filtering。支援 ASTC 的 GPU 直接使用原生 ASTC 4×4 KTX2；其他 GPU 使用 RGBA8 DDS。沒有執行時轉碼。
+- 火焰、爆炸與煙霧先剔除必定透明的片段，再計算雜訊；保留參考 shader 的 sine hash 與三層 turbulence，避免用不同的花紋換取速度。
 - release 使用 `opt-level=3`、Thin LTO、單一 codegen unit；未啟用動態連結與開發用 hot reload。
 
 ## GitHub 建置
@@ -71,6 +79,14 @@
 
 執行 [Android test build](.github/workflows/android.yml)。流程先檢查 secrets，再取得持久依賴、產生資產、建置 arm64 `.so`、封裝並驗證簽章。使用 Android NativeActivity，沒有 Java／Gradle 遊戲層，也不需要 cargo-apk。
 
+評測選項：
+
+- `fixed_resolution`：預設勾選為 **Native 100%**，不勾選為 **Auto 65～100%**；選擇在編譯時寫入程式，HUD 顯示目前模式與實際比例。
+- `vsync`：選擇啟動時請求 VSync；預設不勾，維持原有無上限請求。仍可點擊 FPS 切換，HUD 顯示目前請求；Android 驅動與合成器可能仍限制實際呈現幀率。比較時請記錄並對齊各版的呈現設定。
+- `profile`：GPU 耗時診斷，預設不勾；FPS 評測保持關閉。
+
+建置摘要與發布說明記錄 commit、選項及 APK SHA-256。更改選項後須重新建置並安裝；既有 APK 不會跟著改變。此版的 Native 100% 只建立相同解析度基線，畫質仍須在同裝置比較。
+
 產物：`BevyForest-test-arm64.apk`；同時取代 `test-build` prerelease 的 APK。需要 Android 8.0（API 26）以上與相容的 Vulkan 裝置。SDK 35、NDK `28.2.13676358`；原生 library 使用 16 KiB page alignment，APK 通過 `zipalign -P 16` 驗證。
 
 Android application ID 為 `io.github.edward9s.bevytest`。新 repository 需要自行設定上述四個簽署 secrets；GitHub 不會隨原始碼搬移 secrets 或依賴 Release。
@@ -85,7 +101,7 @@ Android application ID 為 `io.github.edward9s.bevytest`。新 repository 需要
 
 解析度測試包含 Android 啟動前的零尺寸視窗，以及離屏目標改變尺寸後、Image asset event 尚未送達時的攝影機同步。Bevy 0.20 的攝影機更新早於 image event 發布，所以本專案在同一幀明確標記 Projection 更新，避免 GPU 已使用新貼圖而 viewport 仍保留舊尺寸。
 
-場景 render target 明確設定 `copy_on_resize=false`：每幀都會清除並重畫，不需複製舊像素。Bevy 0.20 的 target 預設啟用複製，但預設 usage 沒有 `COPY_SRC`；未關閉複製時，啟動後採用螢幕實際尺寸或動態解析度調整會觸發 `copy_image_on_resize` 驗證錯誤並退出。GPU 回歸檢查依序驗證 1280×800、800×1280、800×480、960×540 四種場景尺寸，包含放大與縮小。
+場景 render target 明確設定 `copy_on_resize=false`：每幀都會清除並重畫，不需複製舊像素。Bevy 0.20 的 target 預設啟用複製，但預設 usage 沒有 `COPY_SRC`；未關閉複製時，啟動後採用螢幕實際尺寸或視窗尺寸變更會觸發 `copy_image_on_resize` 驗證錯誤並退出。GPU 回歸檢查依序驗證 2560×1600、1600×2560、800×480、1280×720 四種場景尺寸，包含放大與縮小。
 
 Android 的 native runner 結束後會以對應的成功／失敗狀態結束程序，確保再次開啟取得新的事件迴圈與 logger；單純切至背景不會執行這個結束程序。這也避免退出後重開累積 `RecreationAttempt` 與 logger 重複初始化錯誤。
 
@@ -102,7 +118,9 @@ python3 scripts/check_assets.py
 cargo run --locked --release
 ```
 
-不開視窗的渲染驗證（固定在 38.52 秒，讓全部特效同時可見；以固定 960×540 的 3D 場景合成至 1280×720，包含原生尺寸 UI，完成局部反射後擷取）：
+桌面也可在編譯時選擇動態解析度：`BEVY_FIXED_RESOLUTION=0 cargo run --locked --release`；設為 `1` 或未指定時採 Native 100%。`BEVY_VSYNC=1` 選擇啟動時請求 VSync。
+
+不開視窗的渲染驗證（固定在 38.52 秒，讓全部特效同時可見；以原生 1280×720 渲染，包含同尺寸 UI，完成局部反射後擷取）：
 
 ```sh
 cargo run --locked -- --capture=build/forest.png

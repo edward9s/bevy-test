@@ -34,7 +34,6 @@ def texture(path, output, srgb=False, normal=False):
                                  value[..., :3] / 12.92,
                                  ((value[..., :3] + .055) / 1.055) ** 2.4)
     assert value.shape == (1024,1024,4)
-    value = value.reshape(512,2,512,2,4).mean(axis=(1,3))
     chain = []
     while True:
         encoded = value.copy()
@@ -91,7 +90,9 @@ def directions(size, face):
 
 def sample(hdr, vectors):
     h, w = hdr.shape[:2]
-    u = (np.arctan2(vectors[..., 0], vectors[..., 2]) / (2*math.pi) + .5) * w - .5
+    # Bevy flips world Z for its left-handed cube lookup. In cube coordinates,
+    # Godot's atan2(world.x, -world.z) panorama convention has no half-turn offset.
+    u = np.mod(np.arctan2(vectors[..., 0], vectors[..., 2]) / (2*math.pi), 1) * w - .5
     v = np.arccos(np.clip(vectors[..., 1], -1, 1)) / math.pi * h - .5
     x, y = np.floor(u).astype('i4'), np.floor(v).astype('i4')
     a, b = (u-x)[..., None], (v-y)[..., None]
@@ -143,6 +144,12 @@ def filter_cube(hdr, size, roughness=None, diffuse=False):
 def environment(source, dest):
     hdr = radiance(source)
     sky = filter_cube(hdr, 256, 0)
+    # Godot applies fog to the visible sky, separately from its lighting maps:
+    # sky_affect=1, aerial_perspective=.25, light_energy=1, background_energy=.5.
+    fog = np.array([.36, .43, .44], dtype='f4')
+    fog = np.where(fog <= .04045, fog/12.92, ((fog+.055)/1.055)**2.4)
+    for face in sky:
+        face[..., :3] = face[..., :3]*.25 + fog*(.75/.5)
     dds(dest/'sky.dds', [[face] for face in sky], True)
     diffuse = filter_cube(hdr, 32, diffuse=True)
     dds(dest/'diffuse.dds', [[face] for face in diffuse], True)
