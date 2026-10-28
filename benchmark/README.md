@@ -63,7 +63,7 @@ Adapter name/driver/backend, maximum supported preprocessing mode, actual MSAA, 
 
 Build provenance: `python3 benchmark/build.py` before Cargo; workflows do this automatically. `Cargo.toml`, `Cargo.lock`, toolchain pins, dependency-key inputs and persistent dependency restore/save scripts are unchanged. Java bridge packaging adds DEX without a third-party dependency. Signed release secrets retain their existing names.
 
-Verified: Rust check/Clippy, 8 Rust tests before the added fractional-tail test, Android arm64 cargo check, Java/DEX, native diagnostic off/on/off on software Vulkan, eight synthetic exports/restores, and an actual offscreen scene capture. GitHub CI also passed Rust/material rendering/target resize/export checks. Full release APK packaging and all target-device checks remain pending.
+Verified: Rust check/Clippy, 9 Rust tests, Android arm64 cargo check, Java/DEX, native diagnostic off/on/off on software Vulkan, eight synthetic exports/restores, and an actual offscreen scene capture. GitHub CI also passed Rust/material rendering/target resize/export checks. Full release APK packaging and all target-device checks remain pending.
 
 Sources: [native diagnostics](https://github.com/bevyengine/bevy/blob/v0.20.0/crates/bevy_render/src/diagnostic/mod.rs), [Adreno preprocessing restriction](https://github.com/bevyengine/bevy/blob/v0.20.0/crates/bevy_render/src/batching/gpu_preprocessing.rs).
 
@@ -84,3 +84,5 @@ No Galaxy Tab S8 is attached to this environment. No tablet FPS, screenshot equi
 The report also provides a separate within-engine A/B sensitivity table. It only allows the selected setting to differ and keeps GPU Diagnostic deltas explicitly labeled profiling overhead; it does not turn those deltas into a unique hardware diagnosis.
 
 APK contents are checked with `python3 benchmark/check_apk.py ENGINE path.apk --commit SHA`: arm64 ELF, DEX integrity, runtime bridge/scripts, required scene assets and baked commit. This supplements the existing signer/zip alignment checks; it does not replace them.
+
+Before warmup, each real run saves an empty invalid snapshot marked in progress. On next launch, a complete snapshot left by a process interruption becomes an invalid result with its reason; partially written files remain excluded and are identified as incomplete in the results viewer. No journal/disk updates occur during measurement. Reference captures are separate and create no benchmark run journal.

@@ -411,14 +411,14 @@ fn animate(
     mut particles: ResMut<Assets<Particles>>,
     camera: Single<&Transform, With<OrbitCamera>>,
 ) {
+    let start = std::time::Instant::now();
     if benchmark::effects_disabled() {
         for (_, mut light) in lights {
             light.intensity = 0.;
         }
-        measure.effect_raw_ms = 0.;
+        measure.effect_raw_ms = start.elapsed().as_secs_f64() * 1000.;
         return;
     }
-    let start = std::time::Instant::now();
     effects::sort_particles(
         time.elapsed_secs_wrapped(),
         camera.translation,

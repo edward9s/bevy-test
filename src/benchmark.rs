@@ -269,7 +269,7 @@ fn apply(world: &mut World, s: &mut State) {
     s.animation_origin = now();
     s.settings = settings(world, s);
     s.definitions.insert("cpu_effects_ms".into(),definition("cpu","std::time::Instant","animate: particle ordering, CPU visibility and local-light update; excludes GPU vertex animation","bevy.effects.animate"));
-    s.definitions.insert("main_schedule".into(),definition("cpu","std::time::Instant","PreUpdate benchmark control entry to Last collector; main-world schedule wall time, excludes render sub-app and may include OS scheduling","bevy.main.schedule"));
+    s.definitions.insert("main_schedule".into(),definition("cpu","std::time::Instant","after command/state acquisition in PreUpdate control to Last observation; main-world wall time, excludes render sub-app and may include OS scheduling","bevy.main.schedule"));
     s.definitions.insert("render_prepare".into(),definition("cpu","std::time::Instant","render world after ExtractCommands/before PrepareAssets to after Prepare/before Render; wall envelope includes parallel task waits","bevy.render.prepare"));
     s.definitions.insert("render_submit".into(),definition("cpu","std::time::Instant","RenderGraph Submit set envelope only; excludes swapchain presentation and subsequent screenshot/readback submission","bevy.render.submit"));
 }
@@ -321,7 +321,19 @@ fn control(world: &mut World) {
     let command = COMMAND.swap(0, Ordering::AcqRel);
     let Some(mut s) = world.remove_resource::<State>() else {
         if (1..=9).contains(&command) {
-            let s = start(
+            let physical = world
+                .query_filtered::<&Window, With<PrimaryWindow>>()
+                .iter(world)
+                .next()
+                .map(|w| w.resolution.physical_size());
+            if physical.is_some_and(|size| {
+                size.min_element() == 0 || size != world.resource::<Resolution>().output
+            }) {
+                COMMAND.store(command, Ordering::Release);
+                STATUS.store(7000, Ordering::Release);
+                return;
+            }
+            let mut s = start(
                 world,
                 if command == 9 {
                     0
@@ -330,14 +342,19 @@ fn control(world: &mut World) {
                 },
                 command == 9,
             );
-            LOCKED.store(true, Ordering::Release);
             REPETITION.store(1, Ordering::Release);
+            journal(world, &mut s);
+            LOCKED.store(true, Ordering::Release);
             STATUS.store(7000, Ordering::Release);
             world.insert_resource(s);
         }
         return;
     };
     s.main_start = now();
+    if render::PIPELINE_ERROR.load(Ordering::Acquire) {
+        s.run
+            .stop("render pipeline compilation failed; see native engine log");
+    }
     if command == 10 && s.reference {
         restore(world, s);
         STATUS.store(0, Ordering::Release);
@@ -435,7 +452,8 @@ fn collect(world: &mut World) {
         restore(world, s);
         if valid && REPETITION.load(Ordering::Acquire) < 3 {
             REPETITION.fetch_add(1, Ordering::AcqRel);
-            let s = start(world, preset, false);
+            let mut s = start(world, preset, false);
+            journal(world, &mut s);
             LOCKED.store(true, Ordering::Release);
             world.insert_resource(s);
             STATUS.store(7000, Ordering::Release);
@@ -522,7 +540,7 @@ fn observe(world: &World, s: &mut State) {
             continue;
         }
         s.seen.insert(path.into(), m.time);
-        s.definitions.entry(path.into()).or_insert_with(||definition(if gpu{"gpu_pass"}else{"cpu"},"RenderDiagnosticsPlugin / DiagnosticsStore; native timestamp sample deduplicated","native diagnostic path span only; asynchronous result; may overlap other spans; observation frame is not GPU execution frame",&format!("bevy.{path}")));
+        s.definitions.entry(path.into()).or_insert_with(||definition(if gpu{"gpu_pass"}else{"cpu"},"RenderDiagnosticsPlugin / DiagnosticsStore; native timestamp sample deduplicated","native path span; publication-time window only, earlier GPU work may arrive here; overlapping spans; observation frame is not execution frame",&format!("bevy.{path}")));
         s.metrics.push(Metric {
             id: s.metrics.len() as u64,
             frame,
@@ -565,7 +583,8 @@ fn settings(world: &World, s: &State) -> String {
         .unwrap()
         .intersects(&RenderLayers::from_layers(&[1, 2]));
     format!(
-        "{{\"msaa_samples\":{msaa},\"taa\":false,\"fxaa\":false,\"shadows\":{shadows},\"bloom\":{bloom},\"effects\":{effects},\"pipeline\":\"Bevy native PBR\",\"shadow_distance_m\":48,\"shadow_cascades\":4,\"shadow_map_size\":2048,\"ssao\":false,\"fog\":true,\"gpu_preprocessing_support\":{},\"timestamp_feature_bits\":{}}}",
+        "{{\"msaa_samples\":{msaa},\"taa\":false,\"fxaa\":false,\"shadows\":{shadows},\"bloom\":{bloom},\"effects\":{effects},\"pipeline\":\"Bevy native PBR\",\"shadow_distance_m\":48,\"shadow_cascades\":4,\"shadow_map_size\":2048,\"ssao\":false,\"fog\":true,\"shadow_filter\":\"Gaussian\",\"tonemap\":\"AcesFitted with existing white normalization\",\"scene_image_format\":\"Rgba8UnormSrgb\",\"texture_format\":{},\"gpu_preprocessing_support\":{},\"timestamp_feature_bits\":{}}}",
+        quote(world.resource::<crate::scene::Forest>().texture_format),
         render::PREPROCESSING.load(Ordering::Acquire),
         render::TIMESTAMPS.load(Ordering::Acquire)
     )
@@ -616,8 +635,10 @@ fn metadata(world: &World, s: &State) -> String {
         .collect::<Vec<_>>()
         .join(",");
     format!(
-        "{{{},\"test_data\":{},\"repetition\":{},\"started_at\":{},\"warmup_seconds\":30,\"measure_seconds\":60,\"engine\":{engine},\"scene\":{},\"device\":{},\"environment\":{{\"backend\":{},\"surface_size\":[{},{}],\"render_size\":[{},{}],\"dynamic_resolution\":{},\"gpu_profiling\":{},\"vsync_requested\":{},\"presentation_mode\":null,\"refresh_hz\":{},\"refresh_limited_possible\":true,\"gpu\":{},\"driver\":{},\"driver_info\":{},\"thermal_status\":{}}},\"settings\":{},\"metrics\":{{{definitions}}},\"limitations\":[\"Application Last callback intervals, not display presentation FPS.\",\"No verified whole-frame GPU span; native named pass timings may overlap and must not be summed.\",\"CPU main/render scopes are wall envelopes, not pure busy or wait time. Pipelined worlds overlap.\",\"Actual swapchain mode unavailable; Android display refresh is captured by Java. AutoNoVsync may remain refresh limited.\",\"GPU preprocessing support: enum 0=None, 1=PreprocessingOnly, 2=Culling, 255=unavailable; timestamp feature bits 1=query, 2=inside passes, 4=inside encoders.\",\"Readiness requires scene assets, reflection completion, no pending pipelines and 120 settled application frames, then 30 second warmup.\",\"Device metadata/thermal snapshot captured before initialization; no continuous thermal series.\",\"No-effects hides six batches and local lights and skips their CPU updates; vegetation remains animated.\"]}}",
+        "{{{},\"reference_only\":{},\"reference_animation_seconds\":{},\"test_data\":{},\"repetition\":{},\"started_at\":{},\"warmup_seconds\":30,\"measure_seconds\":60,\"engine\":{engine},\"scene\":{},\"device\":{},\"environment\":{{\"backend\":{},\"surface_size\":[{},{}],\"render_size\":[{},{}],\"dynamic_resolution\":{},\"gpu_profiling\":{},\"vsync_requested\":{},\"presentation_mode\":null,\"refresh_hz\":{},\"refresh_limited_possible\":true,\"gpu\":{},\"driver\":{},\"driver_info\":{},\"thermal_status\":{}}},\"settings\":{},\"metrics\":{{{definitions}}},\"limitations\":[\"Application Last callback intervals, not display presentation FPS.\",\"No verified whole-frame GPU span; native named pass timings may overlap and must not be summed.\",\"CPU main/render scopes are wall envelopes, not pure busy or wait time. Pipelined worlds overlap.\",\"Actual swapchain mode unavailable; Android display refresh is captured by Java. AutoNoVsync may remain refresh limited.\",\"GPU preprocessing support: enum 0=None, 1=PreprocessingOnly, 2=Culling, 255=unavailable; timestamp feature bits 1=query, 2=inside passes, 4=inside encoders.\",\"Readiness requires scene assets, reflection completion, no pending pipelines and 120 settled application frames, then 30 second warmup.\",\"Device metadata/thermal snapshot captured before initialization; no continuous thermal series.\",\"No-effects hides six batches and local lights and skips their CPU updates; vegetation remains animated.\"]}}",
         identity(s),
+        s.reference,
+        if s.reference { "38.52" } else { "null" },
         s.test_data,
         REPETITION.load(Ordering::Acquire),
         s.started,
@@ -629,7 +650,11 @@ fn metadata(world: &World, s: &State) -> String {
         s.render_size.x,
         s.render_size.y,
         !world.resource::<Resolution>().fixed,
-        s.applied && s.preset == 1,
+        if s.applied {
+            s.preset == 1
+        } else {
+            s.saved.profiling
+        },
         quote(if s.applied { "off" } else { "engine_default" }),
         s.refresh,
         optional(&adapter.name),
@@ -787,4 +812,18 @@ fn check(world: &mut World) {
         _ => unreachable!(),
     }
     world.insert_resource(c);
+}
+
+fn journal(world: &World, s: &mut State) {
+    if s.reference {
+        return;
+    }
+    s.run.reason = Some("process interrupted before completion".into());
+    let result = save(world, s)
+        .and_then(|()| std::fs::write(root().join(&s.id).join(".pending"), "in progress"));
+    s.run.reason = None;
+    if let Err(error) = result {
+        error!("Cannot journal benchmark: {error}");
+        s.run.stop("cannot save benchmark initialization record");
+    }
 }

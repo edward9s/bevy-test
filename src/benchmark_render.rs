@@ -7,7 +7,7 @@ use bevy::{
         Render, RenderApp, RenderSystems,
         batching::gpu_preprocessing::GpuPreprocessingSupport,
         diagnostic::{DiagnosticsRecorder, RenderDiagnosticsPlugin, begin_diagnostics_frame},
-        render_resource::{PipelineCache, WgpuFeatures},
+        render_resource::{CachedPipelineState, PipelineCache, WgpuFeatures},
         renderer::{RenderDevice, RenderGraph, RenderGraphSystems},
     },
 };
@@ -20,6 +20,7 @@ use std::{
 };
 pub static ENABLED: AtomicBool = AtomicBool::new(false);
 pub static ACTIVE: AtomicBool = AtomicBool::new(false);
+pub static PIPELINE_ERROR: AtomicBool = AtomicBool::new(false);
 pub static READY: AtomicBool = AtomicBool::new(false);
 pub static PREPROCESSING: AtomicU8 = AtomicU8::new(255);
 pub static TIMESTAMPS: AtomicU8 = AtomicU8::new(0);
@@ -160,7 +161,19 @@ fn readiness(
     cache: Res<PipelineCache>,
     device: Res<RenderDevice>,
     support: Res<GpuPreprocessingSupport>,
+    mut last_error_check: Local<Option<Instant>>,
 ) {
+    if crate::benchmark::locked()
+        && last_error_check.is_none_or(|at| at.elapsed().as_secs_f32() >= 1.)
+    {
+        PIPELINE_ERROR.store(
+            cache
+                .pipelines()
+                .any(|p| matches!(&p.state, CachedPipelineState::Err(_))),
+            Ordering::Release,
+        );
+        *last_error_check = Some(Instant::now());
+    }
     READY.store(
         cache.waiting_pipelines().next().is_none(),
         Ordering::Release,
@@ -187,17 +200,19 @@ fn submit_start(mut t: ResMut<Timers>) {
 }
 fn submit_end(mut t: ResMut<Timers>) {
     if let Some(start) = t.submit.take() {
+        let submit_ms = start.elapsed().as_secs_f64() * 1000.;
         let Some(clock) = CLOCK.get() else {
             return;
         };
+        let observed_at = clock.elapsed().as_nanos() as u64;
         let mut q = CPU.lock().unwrap();
         if q.len() == 8 {
             q.remove(0);
         }
         q.push(CpuSample {
-            at: clock.elapsed().as_nanos() as u64,
+            at: observed_at,
             prepare: t.prepare_ms,
-            submit: start.elapsed().as_secs_f64() * 1000.,
+            submit: submit_ms,
         });
     }
 }
