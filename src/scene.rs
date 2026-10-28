@@ -107,7 +107,7 @@ pub fn load(
     commands.insert_resource(Forest {
         gltf: server.load("generated/forest.glb"),
         ready: false,
-        texture_format: if astc { "ASTC 512" } else { "RGBA8 512" },
+        texture_format: if astc { "ASTC 1024" } else { "RGBA8 1024" },
         surfaces,
         leaves,
         canopy,

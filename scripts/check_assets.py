@@ -43,7 +43,7 @@ for name in ['ground_albedo','ground_normal','ground_arm','stone_albedo','stone_
     assert dimension == 3 and layers == 1 and dxgi in (10,28)
     width,height,levels = header[3],header[2],header[6]
     if name not in ('sky','diffuse','specular'):
-        assert (width,height,levels)==(512,512,10), name
+        assert (width,height,levels)==(1024,1024,11), name
     expected = sum(max(1,width>>i)*max(1,height>>i) for i in range(levels))*(8 if dxgi==10 else 4)*(6 if cube else 1)
     assert len(content) == 148+expected, name
     assert bool(cube) == (name in ('sky','diffuse','specular'))
@@ -55,7 +55,7 @@ for name in ['ground_albedo','ground_normal','ground_arm','stone_albedo','stone_
     assert content[:12] == b'\xabKTX 20\xbb\r\n\x1a\n'
     fmt, _, width, height, depth, layers, faces, levels, scheme = struct.unpack_from('<9I',content,12)
     assert fmt == (158 if name.endswith('albedo') or name=='canopy' else 157), name
-    assert (width,height,depth,layers,faces,levels,scheme) == (512,512,0,0,1,10,2), name
+    assert (width,height,depth,layers,faces,levels,scheme) == (1024,1024,0,0,1,11,2), name
     for level in range(levels):
         offset, size, unpacked = struct.unpack_from('<3Q',content,80+24*level)
         assert 0 < size and offset+size <= len(content)

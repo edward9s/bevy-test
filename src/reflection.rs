@@ -95,7 +95,7 @@ fn setup(mut commands: Commands, server: Res<AssetServer>, mut images: ResMut<As
             Hdr,
             RenderTarget::Image(face.into()),
             Msaa::Off,
-            ShadowFilteringMethod::Hardware2x2,
+            ShadowFilteringMethod::Gaussian,
             ProbeCamera(index),
             Projection::Perspective(PerspectiveProjection {
                 fov: std::f32::consts::FRAC_PI_2,

@@ -1,4 +1,4 @@
-//! Render the scene below display resolution; compose the UI at display resolution.
+//! Keep the scene and UI at the display's native resolution.
 use crate::{Capture, OrbitCamera, reflection::Reflection, scene::Forest};
 use bevy::{
     camera::RenderTarget,
@@ -15,70 +15,17 @@ pub struct Resolution {
     pub size: UVec2,
     pub output: UVec2,
     pub ready: bool,
-    edge: u32,
-    elapsed: f32,
-    frames: u32,
-    cooldown: f32,
 }
 
 impl Resolution {
     fn new(output: UVec2, image: Handle<Image>) -> Self {
         assert!(output.min_element() > 0, "Empty display resolution");
-        let longest = output.max_element();
-        let edge = (longest * 3 / 4).clamp(longest.min(960), longest.min(1280));
         Self {
             image,
-            size: Self::dimensions(output, edge),
+            size: output,
             output,
             ready: false,
-            edge,
-            elapsed: 0.,
-            frames: 0,
-            cooldown: 2.,
         }
-    }
-
-    fn dimensions(output: UVec2, edge: u32) -> UVec2 {
-        (output.as_vec2() * (edge as f32 / output.max_element() as f32))
-            .round()
-            .as_uvec2()
-            .max(UVec2::ONE)
-    }
-
-    fn sample(&mut self, delta: f32) -> bool {
-        if !self.ready {
-            self.elapsed = 0.;
-            self.frames = 0;
-            self.cooldown = 2.;
-            return false;
-        }
-        if self.cooldown > 0. {
-            self.cooldown = (self.cooldown - delta).max(0.);
-            return false;
-        }
-        self.elapsed += delta;
-        self.frames += 1;
-        if self.elapsed < 1. {
-            return false;
-        }
-        let frame = self.elapsed / self.frames as f32;
-        self.elapsed = 0.;
-        self.frames = 0;
-        let longest = self.output.max_element();
-        let next = if frame > 0.020 {
-            self.edge.saturating_sub(128).max(longest.min(960))
-        } else if frame < 0.014 {
-            (self.edge + 128).min(longest.min(1280))
-        } else {
-            self.edge
-        };
-        if next == self.edge {
-            return false;
-        }
-        self.edge = next;
-        self.size = Self::dimensions(self.output, next);
-        self.cooldown = 2.;
-        true
     }
 }
 
@@ -130,7 +77,17 @@ pub fn setup(
     ));
     commands.spawn((
         Name::new("Scene image"),
-        ImageNode::new(resolution.image.clone()),
+        ImageNode {
+            image: resolution.image.clone(),
+            // Apply Godot's ACES white normalization after the tone curve.
+            // The existing composition pass handles this without another pass.
+            color: Color::linear_rgb(
+                1. / crate::ACES_WHITE,
+                1. / crate::ACES_WHITE,
+                1. / crate::ACES_WHITE,
+            ),
+            ..default()
+        },
         Node {
             position_type: PositionType::Absolute,
             left: px(0),
@@ -162,7 +119,6 @@ pub fn update(
     mut resolution: ResMut<Resolution>,
     mut images: ResMut<Assets<Image>>,
     window: Option<Single<&Window, With<PrimaryWindow>>>,
-    time: Res<Time<Real>>,
     forest: Res<Forest>,
     reflection: Res<Reflection>,
     capture: Res<Capture>,
@@ -196,7 +152,7 @@ pub fn update(
         *resolution = Resolution::new(output, image);
         resolution.ready = ready;
     }
-    if resized || (capture.path.is_none() && resolution.sample(time.delta_secs())) {
+    if resized {
         let size = resolution.size;
         images
             .get_mut(&resolution.image)
@@ -245,7 +201,7 @@ mod tests {
         ));
         app.update();
         let resolution = app.world().resource::<Resolution>();
-        assert_eq!(resolution.size, UVec2::new(960, 540));
+        assert_eq!(resolution.size, UVec2::new(1280, 720));
         let images = app.world().resource::<Assets<Image>>();
         let image = images.get(&resolution.image).unwrap();
         assert!(image.data.is_none());
@@ -310,34 +266,14 @@ mod tests {
     }
 
     #[test]
-    fn preserves_aspect_and_never_supersamples_small_displays() {
-        let large = Resolution::new(UVec2::new(2560, 1600), Handle::default());
-        assert_eq!(large.size, UVec2::new(1280, 800));
-        let small = Resolution::new(UVec2::new(800, 480), Handle::default());
-        assert_eq!(small.size, small.output);
-    }
-
-    #[test]
-    fn sustained_load_reaches_the_quality_floor() {
-        let mut r = Resolution::new(UVec2::new(2560, 1600), Handle::default());
-        r.ready = true;
-        for _ in 0..120 {
-            r.sample(0.25);
+    fn retains_native_detail_on_tablets_and_small_displays() {
+        for output in [
+            UVec2::new(2560, 1600),
+            UVec2::new(1600, 2560),
+            UVec2::new(800, 480),
+        ] {
+            let resolution = Resolution::new(output, Handle::default());
+            assert_eq!(resolution.size, output);
         }
-        assert_eq!(r.size, UVec2::new(960, 600));
-    }
-
-    #[test]
-    fn ignores_warmup_and_recovers_detail_with_headroom() {
-        let mut r = Resolution::new(UVec2::new(1280, 720), Handle::default());
-        for _ in 0..120 {
-            r.sample(0.25);
-        }
-        assert_eq!(r.size, UVec2::new(960, 540));
-        r.ready = true;
-        for _ in 0..2400 {
-            r.sample(0.005);
-        }
-        assert_eq!(r.size, r.output);
     }
 }

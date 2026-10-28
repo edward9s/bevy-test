@@ -50,6 +50,7 @@ jobs:
       - name: Verify source geometry and textures
         run: |
           pip install -r scripts/requirements.txt
+          python3 -m unittest discover -s scripts -p 'test_*.py'
           if [[ ! -f assets/generated/specular.dds ]]; then python3 scripts/prepare_scene.py; fi
           python3 scripts/check_assets.py
       - name: Compile and render all material pipelines
@@ -63,7 +64,7 @@ jobs:
           timeout 600s target/debug/bevy-forest --profile --capture=build/forest.png 2>&1 | tee build/render.log
           test -s build/forest.png
           if grep -E 'ERROR|panicked|Shader.*error|Validation Error' build/render.log; then exit 1; fi
-      - name: Render through startup, portrait and adaptive target resizes
+      - name: Render through startup and native target resizes
         env:
           WGPU_BACKEND: vulkan
           BEVY_ASSET_ROOT: ${{ github.workspace }}
@@ -72,7 +73,7 @@ jobs:
           timeout 600s target/debug/bevy-forest --check-resize --capture=build/resized.png 2>&1 | tee build/resize.log
           test -s build/resized.png
           if grep -E 'ERROR|panicked|Shader.*error|Validation Error' build/resize.log; then exit 1; fi
-          for size in 1280x800 800x1280 800x480 960x540; do
+          for size in 2560x1600 1600x2560 800x480 1280x720; do
             grep -F "Scene resolution: $size" build/resize.log
           done
       - uses: actions/cache/save@v4

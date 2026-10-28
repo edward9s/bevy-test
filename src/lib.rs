@@ -7,7 +7,6 @@ mod resolution;
 mod scene;
 
 use bevy::{
-    anti_alias::fxaa::{Fxaa, Sensitivity},
     app::{AppExit, ScheduleRunnerPlugin},
     camera::{Exposure, Hdr, RenderTarget},
     core_pipeline::tonemapping::Tonemapping,
@@ -22,8 +21,10 @@ use bevy::{
     render::{
         RenderPlugin,
         diagnostic::RenderDiagnosticsPlugin,
-        render_resource::WgpuFeatures,
+        render_resource::{TextureFormat, WgpuFeatures},
+        renderer::{RenderAdapter, RenderDevice},
         settings::{RenderCreation, WgpuSettings},
+        view::{ColorGrading, ColorGradingGlobal},
     },
     window::{PresentMode, PrimaryWindow, WindowResolution},
 };
@@ -31,6 +32,11 @@ use materials::{Foliage, Particles, Water};
 
 // Match the reference renderer at its fixed exposure.
 const LIGHT_SCALE: f32 = std::f32::consts::PI;
+// Godot's ACES adds this input bias and divides the result by ACES(white=1).
+// Bevy's ACES fit omits both. Preserve the physical camera exposure separately.
+const ACES_BIAS: f32 = 1.8;
+const ACES_WHITE: f32 = (ACES_BIAS * (ACES_BIAS + 0.0245786) - 0.000090537)
+    / (ACES_BIAS * (0.983729 * ACES_BIAS + 0.432951) + 0.238081);
 
 #[derive(Resource)]
 struct Orbit {
@@ -73,6 +79,7 @@ struct Measure {
     effect_us: f32,
     vsync: bool,
     profiling: bool,
+    samples: u32,
 }
 #[derive(Resource)]
 struct Capture {
@@ -161,7 +168,8 @@ pub fn run() -> AppExit {
             brightness: 0.,
             ..default()
         })
-        .insert_resource(DirectionalLightShadowMap { size: 1024 })
+        // Godot's 4096 atlas gives four 2048-square cascade tiles.
+        .insert_resource(DirectionalLightShadowMap { size: 2048 })
         .add_plugins(plugins)
         .add_plugins(reflection::ReflectionPlugin)
         .add_plugins((
@@ -173,6 +181,7 @@ pub fn run() -> AppExit {
             Startup,
             (
                 resolution::setup.before(setup),
+                antialiasing.before(setup),
                 setup,
                 scene::load,
                 effects::setup,
@@ -205,6 +214,35 @@ pub fn run() -> AppExit {
     app.run()
 }
 
+fn antialiasing(
+    adapter: Res<RenderAdapter>,
+    device: Res<RenderDevice>,
+    mut measure: ResMut<Measure>,
+) {
+    // 2x isn't universally supported for HDR/depth. Select 4x on devices that
+    // require it, retaining geometric antialiasing instead of lowering quality.
+    let samples = [2, 4]
+        .into_iter()
+        .find(|&count| {
+            [TextureFormat::Rgba16Float, TextureFormat::Depth32Float]
+                .into_iter()
+                .all(|format| {
+                    let features = if device
+                        .features()
+                        .contains(WgpuFeatures::TEXTURE_ADAPTER_SPECIFIC_FORMAT_FEATURES)
+                    {
+                        adapter.get_texture_format_features(format)
+                    } else {
+                        format.guaranteed_format_features(device.features())
+                    };
+                    features.flags.sample_count_supported(count)
+                })
+        })
+        .expect("The renderer requires 2x or 4x MSAA for HDR and depth");
+    measure.samples = samples;
+    info!("MSAA: {samples}x (HDR + depth)");
+}
+
 fn setup(
     mut commands: Commands,
     server: Res<AssetServer>,
@@ -212,6 +250,7 @@ fn setup(
     resolution: Res<resolution::Resolution>,
     capture: Res<Capture>,
     mut clock: ResMut<Time<Virtual>>,
+    measure: Res<Measure>,
 ) {
     if capture.path.is_some() {
         // A deterministic instant with all six effects visible, including lightning.
@@ -233,7 +272,7 @@ fn setup(
                 far: 100.,
                 ..default()
             }),
-            Msaa::Off,
+            Msaa::from_samples(measure.samples),
             Exposure {
                 ev100: (1.0_f32 / (1.2 * 0.65)).log2(),
             },
@@ -264,12 +303,14 @@ fn setup(
                 order: -1,
                 ..default()
             },
-            Fxaa {
-                edge_threshold: Sensitivity::Medium,
-                edge_threshold_min: Sensitivity::Medium,
+            ShadowFilteringMethod::Gaussian,
+            ColorGrading {
+                global: ColorGradingGlobal {
+                    exposure: ACES_BIAS.log2(),
+                    ..default()
+                },
                 ..default()
             },
-            ShadowFilteringMethod::Hardware2x2,
         ));
     commands.spawn((
         DirectionalLight {
@@ -282,7 +323,7 @@ fn setup(
         },
         Transform::IDENTITY.looking_to(Vec3::new(-0.32, -0.82, -0.47), Vec3::Y),
         CascadeShadowConfig {
-            bounds: vec![18., 40.],
+            bounds: vec![5.76, 18.24, 31.2, 48.],
             minimum_distance: 0.1,
             overlap_proportion: 0.15,
         },
@@ -433,7 +474,7 @@ fn stats(
             },
         );
         text.0 = format!(
-            "FPS: {fps:.0} | Auto {}x{} {:.0}% | {} (tap)\nFrame: {:.1} ms | Effects CPU: {:.3} ms\n{gpu}\nShadows: {} (tap) | FXAA | {} | {}",
+            "FPS: {fps:.0} | Native {}x{} {:.0}% | {} (tap)\nFrame: {:.1} ms | Effects CPU: {:.3} ms\n{gpu}\nShadows: {} (tap) | MSAA {}x | {} | {}",
             resolution.size.x,
             resolution.size.y,
             resolution.size.x as f32 / resolution.output.x as f32 * 100.,
@@ -441,10 +482,11 @@ fn stats(
             1000. / fps,
             measure.effect_us / 1000.,
             if sun.shadow_maps_enabled {
-                "2 x 1024"
+                "4 x 2048"
             } else {
                 "Off"
             },
+            measure.samples,
             forest.texture_format,
             if resolution.ready {
                 "Ready"

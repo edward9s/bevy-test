@@ -97,7 +97,7 @@ jobs:
           set -euo pipefail
           tag=test-build
           apk=build/BevyForest-test-arm64.apk
-          notes="Bevy 0.20.0 forest test, adaptive 3D resolution with native UI, release arm64. GPU profiling: ${{ inputs.profile }}. Commit $GITHUB_SHA. Dependency archive: ${{ needs.dependencies.outputs.tag }}. Workflow: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          notes="Bevy 0.20.0 forest test, native 3D resolution, 1024 textures, 4 x 2048 shadows, MSAA 2x/4x, release arm64. GPU profiling: ${{ inputs.profile }}. Commit $GITHUB_SHA. Dependency archive: ${{ needs.dependencies.outputs.tag }}. Workflow: https://github.com/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$tag" "$apk" --clobber --repo "$GITHUB_REPOSITORY"
             gh release edit "$tag" --repo "$GITHUB_REPOSITORY" --target main --title "Bevy forest test #$GITHUB_RUN_NUMBER" --notes "$notes" --prerelease --latest=false
