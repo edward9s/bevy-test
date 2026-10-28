@@ -1,0 +1,405 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "preset_id": {
+      "enum": [
+        "standard",
+        "gpu",
+        "baseline",
+        "no_shadows",
+        "no_aa",
+        "no_bloom",
+        "scale_65",
+        "no_effects"
+      ]
+    },
+    "repetition": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 3
+    },
+    "valid": {
+      "type": "boolean"
+    },
+    "invalid_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "started_at": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "warmup_seconds": {
+      "const": 30
+    },
+    "measure_seconds": {
+      "const": 60
+    },
+    "engine": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "enum": [
+            "Filament",
+            "Godot",
+            "Bevy"
+          ]
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "commit": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^[a-f0-9]{40}$"
+            }
+          ]
+        },
+        "build": {
+          "enum": [
+            "release",
+            "debug"
+          ]
+        }
+      },
+      "required": [
+        "name",
+        "version",
+        "commit",
+        "build"
+      ]
+    },
+    "device": {
+      "type": "object",
+      "properties": {
+        "brand": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "model": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "android": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "fingerprint": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "brand",
+        "model",
+        "android",
+        "fingerprint"
+      ]
+    },
+    "environment": {
+      "type": "object",
+      "properties": {
+        "backend": {
+          "enum": [
+            "Vulkan",
+            "OpenGL ES",
+            "OpenGL",
+            "Metal",
+            "DX12",
+            "unavailable"
+          ]
+        },
+        "surface_size": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "render_size": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "minItems": 2,
+          "maxItems": 2
+        },
+        "dynamic_resolution": {
+          "type": "boolean"
+        },
+        "vsync_requested": {
+          "type": "string",
+          "minLength": 1
+        },
+        "presentation_mode": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "refresh_hz": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          ]
+        },
+        "refresh_limited_possible": {
+          "type": "boolean"
+        },
+        "gpu_profiling": {
+          "type": "boolean"
+        },
+        "gpu": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "driver": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "thermal_status": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 6
+        }
+      },
+      "required": [
+        "backend",
+        "surface_size",
+        "render_size",
+        "dynamic_resolution",
+        "vsync_requested",
+        "presentation_mode",
+        "refresh_hz",
+        "refresh_limited_possible",
+        "gpu_profiling",
+        "gpu",
+        "driver",
+        "thermal_status"
+      ]
+    },
+    "scene": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "seed": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "camera": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "animation": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "geometry_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "sources_sha256": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "seed",
+        "camera",
+        "animation",
+        "geometry_sha256",
+        "sources_sha256"
+      ]
+    },
+    "settings": {
+      "type": "object",
+      "properties": {
+        "msaa_samples": {
+          "enum": [
+            1,
+            2,
+            4,
+            8
+          ]
+        },
+        "taa": {
+          "type": "boolean"
+        },
+        "fxaa": {
+          "type": "boolean"
+        },
+        "shadows": {
+          "type": "boolean"
+        },
+        "bloom": {
+          "type": "boolean"
+        },
+        "effects": {
+          "type": "boolean"
+        },
+        "pipeline": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "msaa_samples",
+        "taa",
+        "fxaa",
+        "shadows",
+        "bloom",
+        "effects",
+        "pipeline"
+      ]
+    },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "unit": {
+            "const": "ms"
+          },
+          "kind": {
+            "enum": [
+              "cpu",
+              "gpu",
+              "gpu_frame",
+              "gpu_pass"
+            ]
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1
+          },
+          "scope": {
+            "type": "string",
+            "minLength": 1
+          },
+          "scope_id": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "unit",
+          "kind",
+          "source",
+          "scope",
+          "scope_id"
+        ]
+      }
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "run_id",
+    "preset_id",
+    "repetition",
+    "valid",
+    "invalid_reason",
+    "started_at",
+    "warmup_seconds",
+    "measure_seconds",
+    "engine",
+    "device",
+    "environment",
+    "scene",
+    "settings",
+    "metrics",
+    "limitations"
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "valid": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "invalid_reason": {
+            "type": "null"
+          },
+          "environment": {
+            "properties": {
+              "dynamic_resolution": {
+                "const": false
+              }
+            }
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "invalid_reason": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  ]
+}

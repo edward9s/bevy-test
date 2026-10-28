@@ -14,6 +14,16 @@ cp target/aarch64-linux-android/release/libbevy_forest.so build/package/lib/arm6
 grep -Fx 'ANativeActivity_onCreate' build/exports.txt
 "$build_tools/aapt" package -f -M android/AndroidManifest.xml \
   -I "$ANDROID_HOME/platforms/android-35/android.jar" -A assets -F build/unsigned.apk
+# Android UI and SAF export require a small Java bridge, without Gradle dependencies.
+mkdir -p build/java build/dex
+javac --release 8 -classpath "$ANDROID_HOME/platforms/android-35/android.jar" \
+  -d build/java android/java/benchmark/*.java
+find build/java -name '*.class' -print > build/java-classes.txt
+"$build_tools/d8" --min-api 26 --lib "$ANDROID_HOME/platforms/android-35/android.jar" \
+  --output build/dex @build/java-classes.txt
+cp build/dex/classes.dex build/package/
+(cd build/package && zip -q ../unsigned.apk classes.dex)
+for method in command status repetition; do grep -Fx "Java_benchmark_Bridge_$method" build/exports.txt; done
 # Native libraries are extracted at install time (extractNativeLibs=true).
 (cd build/package && zip -q -9 ../unsigned.apk lib/arm64-v8a/libbevy_forest.so)
 "$build_tools/zipalign" -P 16 -f 4 build/unsigned.apk build/aligned.apk
@@ -28,3 +38,5 @@ printf '%s' "$KEYSTORE_BASE64" | tr -d '[:space:]' | base64 --decode > "$key"
 "$build_tools/zipalign" -c -P 16 4 build/BevyForest-test-arm64.apk
 unzip -l build/BevyForest-test-arm64.apk > build/apk-contents.txt
 grep -F 'assets/generated/forest.glb' build/apk-contents.txt
+
+grep -F 'classes.dex' build/apk-contents.txt

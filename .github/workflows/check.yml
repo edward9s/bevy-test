@@ -33,11 +33,13 @@ jobs:
             target
           key: desktop-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'rust-toolchain.toml') }}-${{ github.sha }}
           restore-keys: desktop-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'rust-toolchain.toml') }}-
+      - name: Bake benchmark provenance
+        run: python3 benchmark/build.py
       - name: Rust checks
         run: |
           cargo fmt --all --check
           cargo clippy --locked --all-targets -- -D warnings
-          cargo test --locked --lib resolution::tests
+          cargo test --locked --lib
           BEVY_FIXED_RESOLUTION=0 cargo check --locked --lib
       - uses: actions/setup-python@v5
         with:
@@ -62,7 +64,9 @@ jobs:
           set -euo pipefail
           mkdir -p build
           cargo build --locked --bin bevy-forest
-          timeout 600s target/debug/bevy-forest --profile --capture=build/forest.png 2>&1 | tee build/render.log
+          timeout 600s target/debug/bevy-forest --profile --check-benchmark --capture=build/forest.png 2>&1 | tee build/render.log
+          grep -F 'Benchmark check passed:' build/render.log
+          python3 benchmark/compare.py build/benchmark-output --validate-only
           test -s build/forest.png
           if grep -E 'ERROR|panicked|Shader.*error|Validation Error' build/render.log; then exit 1; fi
       - name: Render through startup and native target resizes

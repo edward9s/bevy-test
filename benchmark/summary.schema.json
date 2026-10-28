@@ -1,0 +1,109 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "1.0.0"
+    },
+    "run_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "preset_id": {
+      "enum": [
+        "standard",
+        "gpu",
+        "baseline",
+        "no_shadows",
+        "no_aa",
+        "no_bloom",
+        "scale_65",
+        "no_effects"
+      ]
+    },
+    "valid": {
+      "type": "boolean"
+    },
+    "invalid_reason": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "presentation_fps": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "application": {
+      "anyOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "properties": {
+            "sample_count": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "duration_ms": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "average_fps": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "low_1_fps": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "mean_ms": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "p50_ms": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "p95_ms": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "p99_ms": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "max_ms": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          },
+          "required": [
+            "sample_count",
+            "duration_ms",
+            "average_fps",
+            "low_1_fps",
+            "mean_ms",
+            "p50_ms",
+            "p95_ms",
+            "p99_ms",
+            "max_ms"
+          ]
+        }
+      ]
+    }
+  },
+  "required": [
+    "schema_version",
+    "run_id",
+    "preset_id",
+    "valid",
+    "invalid_reason",
+    "presentation_fps",
+    "application"
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

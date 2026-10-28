@@ -48,3 +48,35 @@ Different builds or settings of the same engine refuse aggregation. Unknown actu
 Pending: complete Android integration, release APK build/package checks, start/cancel/export and restore behavior, background/rotation invalidation, shader/reflection readiness, actual GPU timestamp support, repeated-run memory use, showcase vs Standard overhead, thermal behavior and matched screenshots at 38.52 seconds.
 
 For Bevy's 8–9 FPS, independent resolution/shadow/AA/Bloom/effects tests can identify sensitivity to those workloads. Native render-world timings can separate preparation and submission scopes. These observations alone cannot prove shader ALU, texture bandwidth, occupancy, overdraw, driver stalls or CPU/GPU queue dependencies; AGI/Perfetto or supported vendor counters are still needed. Adreno GPU preprocessing support must be recorded from the actual Bevy adapter, not assumed from model name.
+
+## Bevy Android integration
+
+Use the Android **Benchmark** button (top right): each of eight presets runs three times, progress button cancels, **View results** shows summaries and **Export ZIP** opens SAF. Reference capture freezes only its separate 38.52 s screenshot; Android PixelCopy is asynchronous. A matching settings JSON accompanies the screenshot. Showcase camera/presentation/shadows/Bloom/AA/render scale and virtual clock are restored afterward.
+
+Baseline uses the existing scene: four 2048 shadow cascades at 48 m, native PBR, fog, Bloom, foliage and six effect batches. Actual camera MSAA is recorded from the selected component, following existing adapter HDR/depth checks for 2× or 4×; no quality choice was reduced. No-effects hides water/particles, sets local lights to zero, and skips effect CPU work; foliage wind continues. No-Bloom removes only Bloom. 65% scales each 3D target dimension with native UI preserved.
+
+The native `RenderDiagnosticsPlugin` is registered once before pipelined rendering. A wrapper identifies the exact systems added by this pinned plugin (one main, three render), applies run conditions and asserts the counts, avoiding release-build debug names. It parks/reinstates `DiagnosticsRecorder` at render-frame start; render conditions use latched resource presence, so main-thread requests cannot remove a recorder midway through a render frame. Standard collects no detailed GPU spans. No GPU wait/readback was added to measurement. Pipeline statistics remain disabled. Native diagnostic paths and sample timestamps are retained/deduplicated. A slowest GPU pass is never a whole GPU frame.
+
+CPU scopes are separate: raw effect update, PreUpdate→Last main-world wall envelope, render PrepareAssets→after Prepare wall envelope, and RenderGraph Submit envelope excluding swapchain presentation. These envelopes include scheduling/waits and are not pure busy-time or pure synchronization measurements; pipelined worlds overlap. Asynchronous observations identify receipt frames only. Pass timestamps can arrive after their execution frame; boundary attribution remains approximate.
+
+Adapter name/driver/backend, maximum supported preprocessing mode, actual MSAA, and timestamp feature bits are exported. Bevy 0.20 explicitly disables GPU preprocessing on Adreno 730 and earlier except 720. This explains a path difference, not the measured 8–9 FPS by itself. Preparation/submission scopes and independent A/B results narrow the investigation; AGI/Perfetto is needed for shader/bandwidth/occupancy/overdraw/queue-stall attribution.
+
+Build provenance: `python3 benchmark/build.py` before Cargo; workflows do this automatically. `Cargo.toml`, `Cargo.lock`, toolchain pins, dependency-key inputs and persistent dependency restore/save scripts are unchanged. Java bridge packaging adds DEX without a third-party dependency. Signed release secrets retain their existing names.
+
+Validation in progress: Rust check and Clippy, Java compilation and DEX passed before final integration checks. Native diagnostic off/on/off runtime, eight synthetic preset exports/restores, full release APK packaging, and all target-device checks must pass before this draft is ready.
+
+Sources: [native diagnostics](https://github.com/bevyengine/bevy/blob/v0.20.0/crates/bevy_render/src/diagnostic/mod.rs), [Adreno preprocessing restriction](https://github.com/bevyengine/bevy/blob/v0.20.0/crates/bevy_render/src/batching/gpu_preprocessing.rs).
+
+Formal JSON schemas: `metadata.schema.json`, `summary.schema.json`. The CLI also checks CSV timelines, scope definitions, preset conditions and recomputed statistics. Run `python3 benchmark/examples.py /tmp/forest-examples` for nine clearly marked synthetic runs plus an example Markdown/CSV report.
+
+## Galaxy Tab S8 procedure (all three APKs)
+
+1. Install matching Release APKs built from the three PR branches, with validation, Vulkan queue waits and pipeline statistics disabled. Record APK hashes and build commits. Use the same landscape orientation, screen mode/refresh, brightness and thermal starting condition; close background workloads. Filament: select Vulkan to compare Vulkan results; keep GLES in its own group.
+2. Take a Reference screenshot at 38.52 s in each APK at the same native Surface size. Export settings and inspect materials, shadows, foliage, water, particles, exposure and postprocessing differences. Existing native pipelines differ; matching option names do not prove image equality.
+3. Run Standard (three repetitions automatically). Do not touch camera or change display settings. Initialization and 30 s warmup precede each 60 s measurement. Let the tablet cool consistently between engine/preset batches. Keep all repetitions, including invalid runs with reasons.
+4. Run GPU Diagnostic separately. Export each ZIP through Android's document picker. GPU Diagnostic FPS must remain separate from Standard. Check actual MSAA, Surface/3D sizes, GPU timestamp availability and profiling flags.
+5. Run each Bottleneck preset independently (baseline, no shadows, no AA, no Bloom, fixed 65% axes, no effects). Restore to showcase after each group. Compare deltas only within matching backend/build/device/presentation conditions. A/B effects identify sensitivity, not unique hardware causes.
+6. Validate and report using `python3 benchmark/compare.py exports/*.zip --output tab-s8`. Unknown actual presentation modes intentionally prevent a formal cross-engine ranking; the report still exposes each engine's observations/scopes.
+7. Validate cancellation, background/resume, Surface resize, refresh change and settings changes; affected runs must be invalid. Repeat tests and watch memory/thermal behavior. Measure showcase vs Standard overhead and GPU Diagnostic overhead separately. These checks are pending until done on hardware.
+
+No Galaxy Tab S8 is attached to this environment. No tablet FPS, screenshot equivalence or overhead acceptance is claimed.
