@@ -28,7 +28,9 @@ Godot 4.7.2 Mobile 參考（相同 1280×720 Native 100%、視角與特效時間
 - 左上 FPS、平均 frame time、特效 CPU 耗時。GPU 診斷預設關閉，避免量測本身的負擔；勾選 Android workflow 的 `profile`，或桌面加上 `--profile`，可顯示最慢 GPU render pass 的耗時／名稱。不支援 timestamp query 時顯示 unavailable。這個數字是單一 pass，不能當成整幀 GPU 時間；啟用診斷的 FPS 應與關閉時分開比較。
 - 點擊首行切換無垂直同步上限／VSync；點擊第四行切換陰影開關，供同裝置即時比較。正常展示預設有陰影。顯示 `Warming reflection` 時仍在初次反射擷取，請等 `Ready` 後比較穩態 FPS。
 
-3D 場景與介面固定使用 **Native 100%**。2560×1600 的平板即以 2560×1600 渲染；沒有長邊上限，也不依 FPS 自動降低解析度。Android surface 尚未就緒時先使用 1280×720，取得非零的實際螢幕尺寸後立即同步。
+介面固定使用螢幕原生解析度，3D 場景由 `fixed_resolution` 編譯選項決定。預設勾選為 **Native 100%**：2560×1600 的平板即以 2560×1600 渲染，沒有長邊上限。不勾選為 **Auto 65～100%**：以原生尺寸為上限、每軸 5% 階梯調整，保留原生介面與全部貼圖、陰影及特效設定。Android surface 尚未就緒時先使用 1280×720，取得非零的實際螢幕尺寸後立即同步。
+
+Auto 在資產與反射完成後等待 2 秒，以至少 8 幀、0.5 秒的平均整幀間隔決策；大於 18 ms 降一階、小於 12.5 ms 升一階，改尺寸後等待 1 秒。此模式不啟用 GPU profiling；整幀間隔包含 CPU 與呈現等待，因此 CPU 瓶頸或低刷新率限制也可能降低比例。這與 Godot 的 GPU 耗時控制器不同，不能把兩版 Auto 視為相同工作量。HUD 與 log 顯示實際模式、尺寸與比例；同解析度評測請三者都使用 Native 100%。離屏參考擷取固定採 Native，避免軟體驅動的低 FPS 改變畫質基準。
 
 比較 Godot 時，點擊其 FPS 按鈕切至 `Native 100%`，並確認兩者都完成材質載入與反射擷取。關閉陰影或啟用 GPU profiling 的結果應分開記錄。軟體 Vulkan 只用來驗證資產、shader 與渲染流程；同裝置實測前不宣稱此畫質設定的 FPS 勝負。
 
@@ -77,6 +79,14 @@ Godot 4.7.2 Mobile 參考（相同 1280×720 Native 100%、視角與特效時間
 
 執行 [Android test build](.github/workflows/android.yml)。流程先檢查 secrets，再取得持久依賴、產生資產、建置 arm64 `.so`、封裝並驗證簽章。使用 Android NativeActivity，沒有 Java／Gradle 遊戲層，也不需要 cargo-apk。
 
+評測選項：
+
+- `fixed_resolution`：預設勾選為 **Native 100%**，不勾選為 **Auto 65～100%**；選擇在編譯時寫入程式，HUD 顯示目前模式與實際比例。
+- `vsync`：選擇啟動時請求 VSync；預設不勾，維持原有無上限請求。仍可點擊 FPS 切換，HUD 顯示目前請求；Android 驅動與合成器可能仍限制實際呈現幀率。比較時請記錄並對齊各版的呈現設定。
+- `profile`：GPU 耗時診斷，預設不勾；FPS 評測保持關閉。
+
+建置摘要與發布說明記錄 commit、選項及 APK SHA-256。更改選項後須重新建置並安裝；既有 APK 不會跟著改變。此版的 Native 100% 只建立相同解析度基線，畫質仍須在同裝置比較。
+
 產物：`BevyForest-test-arm64.apk`；同時取代 `test-build` prerelease 的 APK。需要 Android 8.0（API 26）以上與相容的 Vulkan 裝置。SDK 35、NDK `28.2.13676358`；原生 library 使用 16 KiB page alignment，APK 通過 `zipalign -P 16` 驗證。
 
 Android application ID 為 `io.github.edward9s.bevytest`。新 repository 需要自行設定上述四個簽署 secrets；GitHub 不會隨原始碼搬移 secrets 或依賴 Release。
@@ -107,6 +117,8 @@ python3 scripts/prepare_scene.py
 python3 scripts/check_assets.py
 cargo run --locked --release
 ```
+
+桌面也可在編譯時選擇動態解析度：`BEVY_FIXED_RESOLUTION=0 cargo run --locked --release`；設為 `1` 或未指定時採 Native 100%。`BEVY_VSYNC=1` 選擇啟動時請求 VSync。
 
 不開視窗的渲染驗證（固定在 38.52 秒，讓全部特效同時可見；以原生 1280×720 渲染，包含同尺寸 UI，完成局部反射後擷取）：
 

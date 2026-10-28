@@ -38,6 +38,7 @@ jobs:
           cargo fmt --all --check
           cargo clippy --locked --all-targets -- -D warnings
           cargo test --locked --lib resolution::tests
+          BEVY_FIXED_RESOLUTION=0 cargo check --locked --lib
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'

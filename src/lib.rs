@@ -102,6 +102,7 @@ fn main() {
 }
 
 pub fn run() -> AppExit {
+    let vsync = option_env!("BEVY_VSYNC") == Some("1");
     let profiling =
         option_env!("BEVY_PROFILE") == Some("1") || std::env::args().any(|arg| arg == "--profile");
     let path = std::env::args().find_map(|arg| arg.strip_prefix("--capture=").map(str::to_owned));
@@ -127,7 +128,11 @@ pub fn run() -> AppExit {
                 Some(Window {
                     title: "Bevy Forest Test".into(),
                     resolution: WindowResolution::new(1280, 720),
-                    present_mode: PresentMode::AutoNoVsync,
+                    present_mode: if vsync {
+                        PresentMode::AutoVsync
+                    } else {
+                        PresentMode::AutoNoVsync
+                    },
                     ..default()
                 })
             },
@@ -154,6 +159,7 @@ pub fn run() -> AppExit {
     app.insert_resource(Orbit::default())
         .insert_resource(Measure {
             profiling,
+            vsync,
             ..default()
         })
         .insert_resource(Capture {
@@ -474,7 +480,8 @@ fn stats(
             },
         );
         text.0 = format!(
-            "FPS: {fps:.0} | Native {}x{} {:.0}% | {} (tap)\nFrame: {:.1} ms | Effects CPU: {:.3} ms\n{gpu}\nShadows: {} (tap) | MSAA {}x | {} | {}",
+            "FPS: {fps:.0} | {} {}x{} {:.0}% | {} (tap)\nFrame: {:.1} ms | Effects CPU: {:.3} ms\n{gpu}\nShadows: {} (tap) | MSAA {}x | {} | {}",
+            if resolution.fixed { "Native" } else { "Auto" },
             resolution.size.x,
             resolution.size.y,
             resolution.size.x as f32 / resolution.output.x as f32 * 100.,
