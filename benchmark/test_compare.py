@@ -67,6 +67,15 @@ class StatisticsTests(unittest.TestCase):
         r=b.validate(fixture());bad=copy.deepcopy(r);bad['metadata'].update(valid=False,invalid_reason='backgrounded',run_id='bad')
         other=copy.deepcopy(r);other['metadata']['engine']['commit']='b'*40
         md,_=b.report([r,other,bad]);self.assertIn('aggregation refused',md);self.assertIn('backgrounded',md)
+    def test_ab_allows_only_one_workload_variable(self):
+        base=b.validate(fixture());base['metadata']['preset_id']='baseline'
+        other=copy.deepcopy(base);other['metadata'].update(preset_id='no_shadows',run_id='no-shadows');other['metadata']['settings']['shadows']=False
+        gpu=copy.deepcopy(base);gpu['metadata'].update(preset_id='gpu',run_id='gpu');gpu['metadata']['environment']['gpu_profiling']=True
+        text='\n'.join(b.ab_report([base,other,gpu]))
+        self.assertIn('| no_shadows | 1 | 10.000 | +0.00% |',text)
+        self.assertIn('profiling overhead only',text)
+        other['metadata']['settings']['bloom']=False
+        self.assertIn('| no_shadows | 1 | incompatible settings |', '\n'.join(b.ab_report([base,other])))
     def test_json_duplicate_rejected(self):
         with self.assertRaises(ValueError): b.json_object('{"a":1,"a":2}')
 

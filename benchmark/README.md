@@ -63,7 +63,7 @@ Adapter name/driver/backend, maximum supported preprocessing mode, actual MSAA, 
 
 Build provenance: `python3 benchmark/build.py` before Cargo; workflows do this automatically. `Cargo.toml`, `Cargo.lock`, toolchain pins, dependency-key inputs and persistent dependency restore/save scripts are unchanged. Java bridge packaging adds DEX without a third-party dependency. Signed release secrets retain their existing names.
 
-Validation in progress: Rust check and Clippy, Java compilation and DEX passed before final integration checks. Native diagnostic off/on/off runtime, eight synthetic preset exports/restores, full release APK packaging, and all target-device checks must pass before this draft is ready.
+Verified: Rust check/Clippy, 8 Rust tests before the added fractional-tail test, Android arm64 cargo check, Java/DEX, native diagnostic off/on/off on software Vulkan, eight synthetic exports/restores, and an actual offscreen scene capture. GitHub CI also passed Rust/material rendering/target resize/export checks. Full release APK packaging and all target-device checks remain pending.
 
 Sources: [native diagnostics](https://github.com/bevyengine/bevy/blob/v0.20.0/crates/bevy_render/src/diagnostic/mod.rs), [Adreno preprocessing restriction](https://github.com/bevyengine/bevy/blob/v0.20.0/crates/bevy_render/src/batching/gpu_preprocessing.rs).
 
@@ -80,3 +80,7 @@ Formal JSON schemas: `metadata.schema.json`, `summary.schema.json`. The CLI also
 7. Validate cancellation, background/resume, Surface resize, refresh change and settings changes; affected runs must be invalid. Repeat tests and watch memory/thermal behavior. Measure showcase vs Standard overhead and GPU Diagnostic overhead separately. These checks are pending until done on hardware.
 
 No Galaxy Tab S8 is attached to this environment. No tablet FPS, screenshot equivalence or overhead acceptance is claimed.
+
+The report also provides a separate within-engine A/B sensitivity table. It only allows the selected setting to differ and keeps GPU Diagnostic deltas explicitly labeled profiling overhead; it does not turn those deltas into a unique hardware diagnosis.
+
+APK contents are checked with `python3 benchmark/check_apk.py ENGINE path.apk --commit SHA`: arm64 ELF, DEX integrity, runtime bridge/scripts, required scene assets and baked commit. This supplements the existing signer/zip alignment checks; it does not replace them.

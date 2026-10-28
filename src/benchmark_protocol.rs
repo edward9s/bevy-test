@@ -123,6 +123,18 @@ mod tests {
         assert_eq!(s.iter().find(|v| v.0 == "low_1_fps").unwrap().1, 10.);
     }
     #[test]
+    fn fractional_tail() {
+        let mut values = vec![10.; 102];
+        values[100] = 50.;
+        values[101] = 100.;
+        let low = statistics(&values)
+            .into_iter()
+            .find(|v| v.0 == "low_1_fps")
+            .unwrap()
+            .1;
+        assert!((low - 1000. / 75.).abs() < 1e-10);
+    }
+    #[test]
     fn warmup_and_duration() {
         let mut r = Run::new();
         assert!(r.sample(100, true, Frame::default()));

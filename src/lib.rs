@@ -511,7 +511,11 @@ fn stats(
             resolution.size.x,
             resolution.size.y,
             resolution.size.x as f32 / resolution.output.x as f32 * 100.,
-            if measure.vsync { "VSync" } else { "Uncapped" },
+            if measure.vsync {
+                "VSync"
+            } else {
+                "VSync request off"
+            },
             1000. / fps,
             measure.effect_us / 1000.,
             if sun.shadow_maps_enabled {

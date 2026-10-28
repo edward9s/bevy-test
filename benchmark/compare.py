@@ -93,6 +93,7 @@ def validate(files):
         require(type(settings[k]) is bool, 'invalid setting '+k)
     require(settings['msaa_samples'] in (1,2,4,8) and type(settings['msaa_samples']) is not bool, 'invalid MSAA')
     require(isinstance(settings['pipeline'],str), 'missing pipeline')
+    require('test_data' not in m or type(m['test_data']) is bool, 'invalid synthetic-data flag')
     require(isinstance(m['limitations'],list) and all(isinstance(v,str) for v in m['limitations']), 'missing limitations')
     definitions = m['metrics']
     require(isinstance(definitions,dict), 'missing metric definitions')
@@ -166,9 +167,9 @@ def condition(m):
     e, d = m['environment'],m['device']
     hardware=[d[k] for k in ('brand','model','android','fingerprint')]
     scene=[m['scene'][k] for k in ('id','seed','camera','animation','geometry_sha256','sources_sha256')]
-    unknown = m['run_id'] if any(v is None or v=='' for v in hardware+scene) or e['backend']=='unavailable' else None
+    unknown = m['run_id'] if any(v is None or v=='' for v in hardware+scene) or e['backend']=='unavailable' or m['engine']['commit'] is None else None
     present=e['presentation_mode'] or 'unavailable:'+m['engine']['name']
-    return json.dumps([hardware,scene,m['engine']['build'],e['backend'],e['surface_size'],e['render_size'],e['dynamic_resolution'],e['vsync_requested'],present,e['refresh_hz'],e['gpu_profiling'],m['preset_id'],unknown],sort_keys=True)
+    return json.dumps([hardware,scene,m['engine']['build'],e['backend'],e['surface_size'],e['render_size'],e['dynamic_resolution'],e['vsync_requested'],present,e['refresh_hz'],e['thermal_status'],e['gpu_profiling'],m['preset_id'],unknown],sort_keys=True)
 
 
 def aggregate(values):
@@ -189,7 +190,7 @@ def report(runs):
         sig=json.dumps([m['engine'],m['settings']],sort_keys=True)
         signatures.setdefault(key,{}).setdefault(m['engine']['name'],set()).add(sig)
         groups.setdefault(key,[]).append(r)
-    lines=['# Forest benchmark comparison','', 'Application callback intervals; median [minimum, maximum] of independent runs. All times are milliseconds.', '']
+    lines=['# Forest benchmark comparison','', 'Application callback intervals; median [minimum, maximum] of independent runs. All times are milliseconds.', '', 'CPU and GPU scopes differ between engines. Timing values describe their documented scopes and are not directly comparable unless the scope meaning is identical.', '']
     if any(r['metadata'].get('test_data') for r in runs):
         lines+=['**SYNTHETIC TEST DATA: not device performance; no official ranking.**','']
     csv_rows=[]
@@ -244,8 +245,51 @@ def report(runs):
                 lines+= [f'- `{metric}`: {aggregate(v)} ms. Source: {source}. Scope: {scope}.']
             lines+=['- Limitation: '+v for v in sorted({v for r in by[name] for v in r['metadata']['limitations']})]
         lines+=['']
+    lines += ab_report(runs)
     if invalid: lines+=['## Excluded invalid runs','']+invalid
     return '\n'.join(lines)+'\n', csv_rows
+
+
+
+def ab_report(runs):
+    """Within-engine workload sensitivity, kept separate from formal condition tables."""
+    buckets={}
+    for r in runs:
+        m=r['metadata']
+        if not m['valid']: continue
+        # Preserve all provenance/presentation conditions except the explicit test variable.
+        base=json.loads(condition(m))
+        env=m['environment']
+        base[5]=env['surface_size'] # Remove the intentional 65% render-size difference.
+        # Field order is condition(): profiling precedes preset and unknown token.
+        base[-3]=False
+        base[-2]='independent-ab'
+        key=json.dumps([base,m['engine']],sort_keys=True)
+        buckets.setdefault(key,{}).setdefault(m['preset_id'],[]).append(r)
+    lines=['## Within-engine diagnostics','', 'A/B deltas are workload sensitivity and profiling overhead observations, not cross-engine rankings or proof of a unique hardware bottleneck. Settings outside the selected variable must match.', '']
+    allowed={'standard':set(),'baseline':set(),'gpu':set(),'no_shadows':{'shadows'},'no_aa':{'msaa_samples','taa','fxaa'},'no_bloom':{'bloom'},'scale_65':{'scale','fixed_scale_via_dynamic_resolution_api'},'no_effects':{'effects'}}
+    for presets in buckets.values():
+        baseline=presets.get('baseline') or presets.get('standard')
+        if not baseline: continue
+        reference=baseline[0]['metadata']['settings']
+        if any(r['metadata']['settings']!=reference for r in baseline): continue
+        base_fps=statistics.median(r['summary']['application']['average_fps'] for r in baseline)
+        m=baseline[0]['metadata']
+        lines += [f"### {m['engine']['name']} / {m['environment']['backend']} / {m['engine']['commit']}",'', '| Preset | Repetitions | Median application FPS | Delta vs baseline |','|---|---:|---:|---:|']
+        for preset,items in sorted(presets.items()):
+            compatible=True
+            for r in items:
+                actual=r['metadata']['settings']
+                diff={k for k in set(reference)|set(actual) if reference.get(k)!=actual.get(k)}
+                if not diff<=allowed[preset]: compatible=False
+            if not compatible:
+                lines += [f'| {preset} | {len(items)} | incompatible settings | unavailable |']
+                continue
+            value=statistics.median(r['summary']['application']['average_fps'] for r in items)
+            label=preset+' (profiling overhead only)' if preset=='gpu' else preset
+            lines += [f'| {label} | {len(items)} | {value:.3f} | {(value/base_fps-1)*100:+.2f}% |']
+        lines += ['', 'Fewer than three repetitions are incomplete. Lower-resolution gains identify sensitivity to render size; shadow/AA/Bloom/effect deltas identify sensitivity to that selected workload. ALU, bandwidth, overdraw, occupancy and queue waits still require GPU/OS profiling.', '']
+    return lines
 
 
 def main():
