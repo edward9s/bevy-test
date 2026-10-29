@@ -3,10 +3,10 @@
     package="io.github.edward9s.bevytest" android:versionCode="1" android:versionName="0.1.0">
     <uses-sdk android:minSdkVersion="26" android:targetSdkVersion="35" />
     <uses-feature android:name="android.hardware.vulkan.level" android:version="0" android:required="true" />
-    <application android:label="Bevy Forest Test" android:hasCode="false"
+    <application android:label="Bevy Forest Test" android:hasCode="true"
         android:extractNativeLibs="true" android:allowBackup="false"
         android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen">
-        <activity android:name="android.app.NativeActivity" android:exported="true"
+        <activity android:name="benchmark.BenchmarkActivity" android:exported="true"
             android:screenOrientation="landscape"
             android:configChanges="orientation|keyboardHidden|screenSize|screenLayout|density|uiMode">
             <meta-data android:name="android.app.lib_name" android:value="bevy_forest" />

@@ -1,0 +1,69 @@
+{
+  "schema_version": "1.0.0",
+  "run_id": "Bevy1",
+  "preset_id": "standard",
+  "repetition": 1,
+  "valid": true,
+  "invalid_reason": null,
+  "started_at": 1800000000000,
+  "warmup_seconds": 30,
+  "measure_seconds": 60,
+  "engine": {
+    "name": "Bevy",
+    "version": "fixture",
+    "commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "build": "release"
+  },
+  "device": {
+    "brand": "SYNTHETIC",
+    "model": "SYNTHETIC",
+    "android": "fixture",
+    "fingerprint": "fixture",
+    "display_mode_size": [
+      1280,
+      720
+    ]
+  },
+  "environment": {
+    "backend": "Vulkan",
+    "surface_size": [
+      1280,
+      720
+    ],
+    "render_size": [
+      1280,
+      720
+    ],
+    "dynamic_resolution": false,
+    "vsync_requested": "off",
+    "presentation_mode": "FIFO",
+    "refresh_hz": 120,
+    "gpu_profiling": false,
+    "refresh_limited_possible": true,
+    "gpu": null,
+    "driver": null,
+    "thermal_status": null
+  },
+  "scene": {
+    "id": "fixture",
+    "seed": "fixture",
+    "camera": "fixture",
+    "animation": "fixture",
+    "geometry_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "sources_sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  "settings": {
+    "msaa_samples": 2,
+    "taa": false,
+    "fxaa": false,
+    "shadows": true,
+    "bloom": true,
+    "effects": true,
+    "pipeline": "fixture"
+  },
+  "metrics": {},
+  "limitations": [
+    "SYNTHETIC protocol example; no physical device measurement."
+  ],
+  "test_data": true
+}

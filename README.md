@@ -137,3 +137,7 @@ cargo run --locked -- --check-resize --capture=build/resized.png
 ## 素材與授權
 
 詳見 [assets/CREDITS.md](assets/CREDITS.md)。幾何與匯出器來自上述固定的 godot-test 版本；本專案的 Bevy shader 介面參考 Bevy 0.20.0（MIT／Apache-2.0）。Poly Haven 素材為 CC0。
+
+## Unified benchmark
+
+Implementation status, protocol and comparison CLI: [benchmark/README.md](benchmark/README.md).

@@ -9,13 +9,15 @@ use bevy::{
     window::PrimaryWindow,
 };
 
-#[derive(Resource)]
+#[derive(Resource, Clone)]
 pub struct Resolution {
     pub image: Handle<Image>,
     pub size: UVec2,
     pub output: UVec2,
     pub ready: bool,
     pub fixed: bool,
+    pub benchmark_scale: f32,
+    pub dirty: bool,
     level: u32,
     wait: f32,
     elapsed: f32,
@@ -31,6 +33,8 @@ impl Resolution {
             output,
             ready: false,
             fixed,
+            benchmark_scale: 1.,
+            dirty: false,
             level: 20,
             wait: 2.,
             elapsed: 0.,
@@ -215,11 +219,22 @@ pub fn update(
         let image = resolution.image.clone();
         let ready = resolution.ready;
         let fixed = resolution.fixed;
+        let scale = resolution.benchmark_scale;
         *resolution = Resolution::new(output, image, fixed);
         resolution.ready = ready;
+        resolution.benchmark_scale = scale;
     }
     let scaled = resolution.sample(time.delta_secs());
-    if resized || scaled {
+    let desired = (resolution.output.as_vec2() * resolution.benchmark_scale)
+        .round()
+        .as_uvec2()
+        .max(UVec2::ONE);
+    let benchmark_changed = resolution.fixed && desired != resolution.size;
+    if benchmark_changed {
+        resolution.size = desired;
+    }
+    if resized || scaled || benchmark_changed || resolution.dirty {
+        resolution.dirty = false;
         let size = resolution.size;
         images
             .get_mut(&resolution.image)
@@ -262,6 +277,7 @@ mod tests {
             .insert_resource(Capture {
                 path: None,
                 check_resize: false,
+                check_benchmark: false,
                 resize_step: 0,
                 seconds: 0.,
                 captured: false,

@@ -1,5 +1,9 @@
 #[cfg(target_os = "android")]
 mod android;
+mod benchmark;
+mod benchmark_build;
+mod benchmark_protocol;
+mod benchmark_render;
 mod effects;
 mod materials;
 mod reflection;
@@ -20,7 +24,6 @@ use bevy::{
     prelude::*,
     render::{
         RenderPlugin,
-        diagnostic::RenderDiagnosticsPlugin,
         render_resource::{TextureFormat, WgpuFeatures},
         renderer::{RenderAdapter, RenderDevice},
         settings::{RenderCreation, WgpuSettings},
@@ -38,7 +41,7 @@ const ACES_BIAS: f32 = 1.8;
 const ACES_WHITE: f32 = (ACES_BIAS * (ACES_BIAS + 0.0245786) - 0.000090537)
     / (ACES_BIAS * (0.983729 * ACES_BIAS + 0.432951) + 0.238081);
 
-#[derive(Resource)]
+#[derive(Resource, Clone)]
 struct Orbit {
     yaw: f32,
     pitch: f32,
@@ -77,6 +80,7 @@ struct Measure {
     elapsed: f32,
     frames: u32,
     effect_us: f32,
+    effect_raw_ms: f64,
     vsync: bool,
     profiling: bool,
     samples: u32,
@@ -85,6 +89,7 @@ struct Measure {
 struct Capture {
     path: Option<String>,
     check_resize: bool,
+    check_benchmark: bool,
     resize_step: u32,
     seconds: f32,
     captured: bool,
@@ -106,6 +111,7 @@ pub fn run() -> AppExit {
     let profiling =
         option_env!("BEVY_PROFILE") == Some("1") || std::env::args().any(|arg| arg == "--profile");
     let path = std::env::args().find_map(|arg| arg.strip_prefix("--capture=").map(str::to_owned));
+    let check_benchmark = std::env::args().any(|arg| arg == "--check-benchmark");
     let check_resize = std::env::args().any(|arg| arg == "--check-resize");
     assert!(
         !check_resize || path.is_some(),
@@ -121,6 +127,9 @@ pub fn run() -> AppExit {
     let headless = path.is_some();
     let mut plugins = DefaultPlugins
         .build()
+        .add_before::<bevy::render::pipelined_rendering::PipelinedRenderingPlugin>(
+            benchmark_render::RuntimeDiagnosticsPlugin,
+        )
         .set(WindowPlugin {
             primary_window: if headless {
                 None
@@ -165,6 +174,7 @@ pub fn run() -> AppExit {
         .insert_resource(Capture {
             path,
             check_resize,
+            check_benchmark,
             resize_step: 0,
             seconds: 0.,
             captured: false,
@@ -209,9 +219,8 @@ pub fn run() -> AppExit {
             PostUpdate,
             resolution::sync_projection.before(bevy::camera::CameraUpdateSystems),
         );
-    if profiling {
-        app.add_plugins(RenderDiagnosticsPlugin);
-    }
+    benchmark_render::ENABLED.store(profiling, std::sync::atomic::Ordering::Release);
+    app.add_plugins(benchmark::BenchmarkPlugin);
     if headless {
         app.add_plugins(ScheduleRunnerPlugin::run_loop(
             std::time::Duration::from_millis(16),
@@ -356,14 +365,17 @@ fn setup(
 }
 
 fn orbit(
-    motion: Res<AccumulatedMouseMotion>,
-    scroll: Res<AccumulatedMouseScroll>,
+    input: (Res<AccumulatedMouseMotion>, Res<AccumulatedMouseScroll>),
     buttons: Res<ButtonInput<MouseButton>>,
     touches: Res<Touches>,
     window: Single<&Window, With<PrimaryWindow>>,
     mut orbit: ResMut<Orbit>,
     mut camera: Single<&mut Transform, With<OrbitCamera>>,
 ) {
+    if benchmark::locked() {
+        return;
+    }
+    let (motion, scroll) = input;
     let size = Vec2::new(window.width(), window.height());
     if size.min_element() <= 0. {
         return;
@@ -400,13 +412,21 @@ fn animate(
     camera: Single<&Transform, With<OrbitCamera>>,
 ) {
     let start = std::time::Instant::now();
+    if benchmark::effects_disabled() {
+        for (_, mut light) in lights {
+            light.intensity = 0.;
+        }
+        measure.effect_raw_ms = start.elapsed().as_secs_f64() * 1000.;
+        return;
+    }
     effects::sort_particles(
         time.elapsed_secs_wrapped(),
         camera.translation,
         &mut particles,
     );
     effects::animate(time, lights, batches);
-    measure.effect_us = measure.effect_us * 0.9 + start.elapsed().as_secs_f32() * 1_000_000. * 0.1;
+    measure.effect_raw_ms = start.elapsed().as_secs_f64() * 1000.;
+    measure.effect_us = measure.effect_us * 0.9 + measure.effect_raw_ms as f32 * 1000. * 0.1;
 }
 fn controls(
     mut measure: ResMut<Measure>,
@@ -415,6 +435,9 @@ fn controls(
     touches: Res<Touches>,
     window: Option<Single<&mut Window, With<PrimaryWindow>>>,
 ) {
+    if benchmark::locked() {
+        return;
+    }
     let mut window = window;
     if let Some(window) = window.as_mut() {
         let tap = touches
@@ -449,6 +472,9 @@ fn stats(
     resolution: Res<resolution::Resolution>,
     sun: Single<&DirectionalLight>,
 ) {
+    if benchmark::locked() {
+        return;
+    }
     measure.elapsed += time.delta_secs();
     measure.frames += 1;
     if measure.elapsed >= 0.5 && forest.ready {
@@ -485,7 +511,11 @@ fn stats(
             resolution.size.x,
             resolution.size.y,
             resolution.size.x as f32 / resolution.output.x as f32 * 100.,
-            if measure.vsync { "VSync" } else { "Uncapped" },
+            if measure.vsync {
+                "VSync"
+            } else {
+                "VSync request off"
+            },
             1000. / fps,
             measure.effect_us / 1000.,
             if sun.shadow_maps_enabled {
@@ -512,6 +542,9 @@ fn capture(
     mut capture: ResMut<Capture>,
     reflection: Res<reflection::Reflection>,
 ) {
+    if capture.check_benchmark && !benchmark::check_done() {
+        return;
+    }
     if capture.path.is_none() || !forest.ready || !reflection.is_ready() {
         return;
     }

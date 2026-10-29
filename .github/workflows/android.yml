@@ -81,6 +81,8 @@ jobs:
           pip install -r scripts/requirements.txt
           if [[ ! -f assets/generated/specular.dds ]]; then python3 scripts/prepare_scene.py; fi
           python3 scripts/check_assets.py
+      - name: Bake benchmark provenance
+        run: python3 benchmark/build.py
       - name: Build optimized native library
         env:
           BEVY_PROFILE: ${{ inputs.profile && '1' || '0' }}
@@ -93,7 +95,9 @@ jobs:
           STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        run: bash scripts/package_android.sh
+        run: |
+          bash scripts/package_android.sh
+          python3 benchmark/check_apk.py Bevy build/BevyForest-test-arm64.apk --commit "$GITHUB_SHA"
       - uses: actions/upload-artifact@v4
         with:
           name: BevyForest-arm64

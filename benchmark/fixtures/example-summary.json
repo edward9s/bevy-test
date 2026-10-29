@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0.0",
+  "run_id": "Bevy1",
+  "preset_id": "standard",
+  "valid": true,
+  "invalid_reason": null,
+  "application": {
+    "sample_count": 600,
+    "duration_ms": 60000,
+    "average_fps": 10,
+    "low_1_fps": 10,
+    "mean_ms": 100,
+    "p50_ms": 100,
+    "p95_ms": 100,
+    "p99_ms": 100,
+    "max_ms": 100
+  },
+  "presentation_fps": null
+}
