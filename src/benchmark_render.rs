@@ -4,7 +4,7 @@ use bevy::{
     ecs::schedule::{BoxedCondition, ConditionWithAccess, ScheduleLabel, SystemKey},
     prelude::*,
     render::{
-        Render, RenderApp, RenderSystems,
+        Render, RenderApp, RenderStartup, RenderSystems,
         batching::gpu_preprocessing::GpuPreprocessingSupport,
         diagnostic::{DiagnosticsRecorder, RenderDiagnosticsPlugin, begin_diagnostics_frame},
         render_resource::{CachedPipelineState, PipelineCache, WgpuFeatures},
@@ -20,6 +20,7 @@ use std::{
 };
 pub static ENABLED: AtomicBool = AtomicBool::new(false);
 pub static ACTIVE: AtomicBool = AtomicBool::new(false);
+pub static DEVICE_GENERATION: AtomicUsize = AtomicUsize::new(0);
 pub static PIPELINE_COUNT: AtomicUsize = AtomicUsize::new(0);
 pub static PIPELINE_ERROR: AtomicBool = AtomicBool::new(false);
 pub static READY: AtomicBool = AtomicBool::new(false);
@@ -95,6 +96,7 @@ impl Plugin for RuntimeDiagnosticsPlugin {
         if let Some(render) = app.get_sub_app_mut(RenderApp) {
             render
                 .init_resource::<Timers>()
+                .add_systems(RenderStartup, device_acquired)
                 .add_systems(
                     Render,
                     (
@@ -157,6 +159,9 @@ fn toggle(world: &mut World) {
         world.contains_resource::<DiagnosticsRecorder>(),
         Ordering::Release,
     );
+}
+fn device_acquired() {
+    DEVICE_GENERATION.fetch_add(1, Ordering::Release);
 }
 fn readiness(
     cache: Res<PipelineCache>,

@@ -108,6 +108,7 @@ struct State {
     settings: String,
     poll: u64,
     pipeline_count: usize,
+    device_generation: usize,
 }
 pub struct BenchmarkPlugin;
 impl Plugin for BenchmarkPlugin {
@@ -229,6 +230,7 @@ fn start(world: &mut World, preset: usize, reference: bool) -> State {
         settings: String::new(),
         poll: 0,
         pipeline_count: render::PIPELINE_COUNT.load(Ordering::Acquire),
+        device_generation: render::DEVICE_GENERATION.load(Ordering::Acquire),
     }
 }
 fn apply(world: &mut World, s: &mut State) {
@@ -401,6 +403,11 @@ fn collect(world: &mut World) {
     let Some(mut s) = world.remove_resource::<State>() else {
         return;
     };
+    let generation = render::DEVICE_GENERATION.load(Ordering::Acquire);
+    if s.applied && generation != s.device_generation {
+        s.run.stop("render device reset during benchmark");
+    }
+    s.device_generation = generation;
     let pipelines = render::PIPELINE_COUNT.load(Ordering::Acquire);
     let changed = pipelines != s.pipeline_count;
     s.pipeline_count = pipelines;

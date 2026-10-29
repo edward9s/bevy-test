@@ -94,3 +94,5 @@ GPU Slowest Pass selects the largest median of per-run mean observations among n
 Physical display mode pixels and rotation are captured through Android's Display API, separately from the application Surface and 3D target. Missing physical display mode information is explicitly marked in the report.
 
 Verification completed before the final pipeline-count guard: 9 Rust tests, Clippy, Android arm64 cargo check and Release library build, manually assembled unsigned APK ABI/DEX/JNI/provenance checks, plus software-Vulkan native diagnostics off/on/off and eight synthetic export/restore presets. Pipeline count changes now reset warmup or invalidate measurement, including pipelines that compile entirely between readiness checks. Latest revision checks are recorded by PR CI. Repository-key signing and target-device acceptance remain pending.
+
+RenderStartup device acquisition increments a generation counter; a GPU device reset during an applied benchmark invalidates the run, independently of shader-cache count changes.
