@@ -325,6 +325,17 @@ fn set_clock(world: &mut World, elapsed: f64, reference: bool) {
 fn control(world: &mut World) {
     let command = COMMAND.swap(0, Ordering::AcqRel);
     let Some(mut s) = world.remove_resource::<State>() else {
+        // A start can be pending before a State exists while the native Surface
+        // catches up with Resolution. Cancellation/lifecycle events must also
+        // terminate that wait, without changing idle showcase status.
+        let stopped = match command {
+            90 => Some(5000),
+            98 | 99 => Some(4000),
+            _ => None,
+        };
+        if let Some(status) = stopped {
+            let _ = STATUS.compare_exchange(7000, status, Ordering::AcqRel, Ordering::Acquire);
+        }
         if (1..=9).contains(&command) {
             let physical = world
                 .query_filtered::<&Window, With<PrimaryWindow>>()
@@ -334,7 +345,7 @@ fn control(world: &mut World) {
             if physical.is_some_and(|size| {
                 size.min_element() == 0 || size != world.resource::<Resolution>().output
             }) {
-                COMMAND.store(command, Ordering::Release);
+                defer_start(&COMMAND, command);
                 STATUS.store(7000, Ordering::Release);
                 return;
             }
@@ -398,6 +409,11 @@ fn control(world: &mut World) {
         }
     }
     world.insert_resource(s);
+}
+fn defer_start(pending: &AtomicI32, command: i32) {
+    // A newer UI cancel/pause may arrive after control() drains the command.
+    // Keep it rather than overwriting it with the deferred start.
+    let _ = pending.compare_exchange(0, command, Ordering::AcqRel, Ordering::Acquire);
 }
 fn collect(world: &mut World) {
     let Some(mut s) = world.remove_resource::<State>() else {
@@ -839,5 +855,40 @@ fn journal(world: &World, s: &mut State) {
     if let Err(error) = result {
         error!("Cannot journal benchmark: {error}");
         s.run.stop("cannot save benchmark initialization record");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn surface_wait_can_be_cancelled_without_a_state() {
+        let mut world = World::new();
+        for (command, expected) in [(90, 5000), (98, 4000), (99, 4000)] {
+            STATUS.store(7000, Ordering::Release);
+            COMMAND.store(command, Ordering::Release);
+            control(&mut world);
+            assert_eq!(STATUS.load(Ordering::Acquire), expected);
+            assert_eq!(COMMAND.load(Ordering::Acquire), 0);
+            assert!(!world.contains_resource::<State>());
+        }
+        // Pausing ordinary showcase mode must not create an invalid result.
+        STATUS.store(0, Ordering::Release);
+        COMMAND.store(99, Ordering::Release);
+        control(&mut world);
+        assert_eq!(STATUS.load(Ordering::Acquire), 0);
+    }
+
+    #[test]
+    fn deferred_start_preserves_newer_ui_commands() {
+        let pending = AtomicI32::new(0);
+        defer_start(&pending, 1);
+        assert_eq!(pending.swap(0, Ordering::AcqRel), 1);
+        for command in [90, 98, 99] {
+            pending.store(command, Ordering::Release);
+            defer_start(&pending, 1);
+            assert_eq!(pending.swap(0, Ordering::AcqRel), command);
+        }
     }
 }
