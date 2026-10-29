@@ -1,6 +1,6 @@
 # Unified forest benchmark — implementation in progress
 
-Schema version `1.0.0`. This branch is a work in progress; no Galaxy Tab S8 measurements or completed APK validation are claimed.
+Schema version `1.0.0`. This branch is a work in progress; no Galaxy Tab S8 measurements or repository-key signing verification are claimed.
 
 Each run directory contains `metadata.json`, `frames.csv`, `metrics.csv`, and `summary.json`.
 The metadata and summary carry the same `schema_version`, `run_id`, `preset_id`, `valid`, and `invalid_reason`.
@@ -45,7 +45,7 @@ Different builds or settings of the same engine refuse aggregation. Unknown actu
 
 ## Required physical-device verification
 
-Pending: complete Android integration, release APK build/package checks, start/cancel/export and restore behavior, background/rotation invalidation, shader/reflection readiness, actual GPU timestamp support, repeated-run memory use, showcase vs Standard overhead, thermal behavior and matched screenshots at 38.52 seconds.
+Pending: physical-device validation of Android integration, repository-key signed APK checks, start/cancel/export and restore behavior, background/rotation invalidation, shader/reflection readiness, actual GPU timestamp support, repeated-run memory use, showcase vs Standard overhead, thermal behavior and matched screenshots at 38.52 seconds.
 
 For Bevy's 8–9 FPS, independent resolution/shadow/AA/Bloom/effects tests can identify sensitivity to those workloads. Native render-world timings can separate preparation and submission scopes. These observations alone cannot prove shader ALU, texture bandwidth, occupancy, overdraw, driver stalls or CPU/GPU queue dependencies; AGI/Perfetto or supported vendor counters are still needed. Adreno GPU preprocessing support must be recorded from the actual Bevy adapter, not assumed from model name.
 
@@ -86,3 +86,11 @@ The report also provides a separate within-engine A/B sensitivity table. It only
 APK contents are checked with `python3 benchmark/check_apk.py ENGINE path.apk --commit SHA`: arm64 ELF, DEX integrity, runtime bridge/scripts, required scene assets and baked commit. This supplements the existing signer/zip alignment checks; it does not replace them.
 
 Before warmup, each real run saves an empty invalid snapshot marked in progress. On next launch, a complete snapshot left by a process interruption becomes an invalid result with its reason; partially written files remain excluded and are identified as incomplete in the results viewer. No journal/disk updates occur during measurement. Reference captures are separate and create no benchmark run journal.
+
+Committed `example-metadata.json`, `example-frames.csv`, `example-metrics.csv`, `example-summary.json`, and [example-report.md](example-report.md) are **synthetic fixtures**, not device scores. `examples.py` creates complete directly loadable run folders. Use one latest full ZIP per APK; overlapping exports are rejected for duplicate run IDs.
+
+GPU Slowest Pass selects the largest median of per-run mean observations among named spans. Native spans may be nested/inclusive; they are not automatically leaf passes or whole GPU duration. Official results come from exported summaries. Showcase HUD counters in Godot/Bevy pause during measurement.
+
+Physical display mode pixels and rotation are captured through Android's Display API, separately from the application Surface and 3D target. Missing physical display mode information is explicitly marked in the report.
+
+Verification completed before the final pipeline-count guard: 9 Rust tests, Clippy, Android arm64 cargo check and Release library build, manually assembled unsigned APK ABI/DEX/JNI/provenance checks, plus software-Vulkan native diagnostics off/on/off and eight synthetic export/restore presets. Pipeline count changes now reset warmup or invalidate measurement, including pipelines that compile entirely between readiness checks. Latest revision checks are recorded by PR CI. Repository-key signing and target-device acceptance remain pending.

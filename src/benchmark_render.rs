@@ -14,12 +14,13 @@ use bevy::{
 use std::{
     sync::{
         Mutex,
-        atomic::{AtomicBool, AtomicU8, Ordering},
+        atomic::{AtomicBool, AtomicU8, AtomicUsize, Ordering},
     },
     time::Instant,
 };
 pub static ENABLED: AtomicBool = AtomicBool::new(false);
 pub static ACTIVE: AtomicBool = AtomicBool::new(false);
+pub static PIPELINE_COUNT: AtomicUsize = AtomicUsize::new(0);
 pub static PIPELINE_ERROR: AtomicBool = AtomicBool::new(false);
 pub static READY: AtomicBool = AtomicBool::new(false);
 pub static PREPROCESSING: AtomicU8 = AtomicU8::new(255);
@@ -163,6 +164,7 @@ fn readiness(
     support: Res<GpuPreprocessingSupport>,
     mut last_error_check: Local<Option<Instant>>,
 ) {
+    PIPELINE_COUNT.store(cache.pipelines().count(), Ordering::Release);
     if crate::benchmark::locked()
         && last_error_check.is_none_or(|at| at.elapsed().as_secs_f32() >= 1.)
     {

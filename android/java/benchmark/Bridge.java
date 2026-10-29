@@ -90,6 +90,9 @@ public final class Bridge {
             JSONObject device = new JSONObject();
             device.put("brand", Build.BRAND); device.put("model", Build.MODEL);
             device.put("android", Build.VERSION.RELEASE); device.put("fingerprint", Build.FINGERPRINT);
+            android.view.Display.Mode mode = activity.getWindowManager().getDefaultDisplay().getMode();
+            device.put("display_mode_size", new org.json.JSONArray(new int[] {mode.getPhysicalWidth(), mode.getPhysicalHeight()}));
+            device.put("display_rotation", activity.getWindowManager().getDefaultDisplay().getRotation());
             device.put("api", Build.VERSION.SDK_INT); device.put("captured_at", System.currentTimeMillis());
             device.put("thermal_status", Build.VERSION.SDK_INT >= 29 ? ((PowerManager) activity.getSystemService(Activity.POWER_SERVICE)).getCurrentThermalStatus() : JSONObject.NULL);
             write(new File(activity.getFilesDir(), "benchmark-thermal.json"), device.get("thermal_status").toString());

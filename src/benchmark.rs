@@ -107,6 +107,7 @@ struct State {
     seen: HashMap<String, bevy::platform::time::Instant>,
     settings: String,
     poll: u64,
+    pipeline_count: usize,
 }
 pub struct BenchmarkPlugin;
 impl Plugin for BenchmarkPlugin {
@@ -227,6 +228,7 @@ fn start(world: &mut World, preset: usize, reference: bool) -> State {
         seen: HashMap::new(),
         settings: String::new(),
         poll: 0,
+        pipeline_count: render::PIPELINE_COUNT.load(Ordering::Acquire),
     }
 }
 fn apply(world: &mut World, s: &mut State) {
@@ -264,6 +266,7 @@ fn apply(world: &mut World, s: &mut State) {
     render::ENABLED.store(s.preset == 1, Ordering::Release);
     render::COLLECT.store(true, Ordering::Release);
     NO_EFFECTS.store(s.preset == 7, Ordering::Release);
+    s.pipeline_count = render::PIPELINE_COUNT.load(Ordering::Acquire);
     s.applied = true;
     s.drawn = 0;
     s.animation_origin = now();
@@ -398,7 +401,11 @@ fn collect(world: &mut World) {
     let Some(mut s) = world.remove_resource::<State>() else {
         return;
     };
-    let ready = world.resource::<Resolution>().ready && render::READY.load(Ordering::Acquire);
+    let pipelines = render::PIPELINE_COUNT.load(Ordering::Acquire);
+    let changed = pipelines != s.pipeline_count;
+    s.pipeline_count = pipelines;
+    let ready =
+        !changed && world.resource::<Resolution>().ready && render::READY.load(Ordering::Acquire);
     if !s.applied && ready && s.run.phase != Phase::Finished {
         apply(world, &mut s);
         world.insert_resource(s);
@@ -635,7 +642,7 @@ fn metadata(world: &World, s: &State) -> String {
         .collect::<Vec<_>>()
         .join(",");
     format!(
-        "{{{},\"reference_only\":{},\"reference_animation_seconds\":{},\"test_data\":{},\"repetition\":{},\"started_at\":{},\"warmup_seconds\":30,\"measure_seconds\":60,\"engine\":{engine},\"scene\":{},\"device\":{},\"environment\":{{\"backend\":{},\"surface_size\":[{},{}],\"render_size\":[{},{}],\"dynamic_resolution\":{},\"gpu_profiling\":{},\"vsync_requested\":{},\"presentation_mode\":null,\"refresh_hz\":{},\"refresh_limited_possible\":true,\"gpu\":{},\"driver\":{},\"driver_info\":{},\"thermal_status\":{}}},\"settings\":{},\"metrics\":{{{definitions}}},\"limitations\":[\"Application Last callback intervals, not display presentation FPS.\",\"No verified whole-frame GPU span; native named pass timings may overlap and must not be summed.\",\"CPU main/render scopes are wall envelopes, not pure busy or wait time. Pipelined worlds overlap.\",\"Actual swapchain mode unavailable; Android display refresh is captured by Java. AutoNoVsync may remain refresh limited.\",\"GPU preprocessing support: enum 0=None, 1=PreprocessingOnly, 2=Culling, 255=unavailable; timestamp feature bits 1=query, 2=inside passes, 4=inside encoders.\",\"Readiness requires scene assets, reflection completion, no pending pipelines and 120 settled application frames, then 30 second warmup.\",\"Device metadata/thermal snapshot captured before initialization; no continuous thermal series.\",\"No-effects hides six batches and local lights and skips their CPU updates; vegetation remains animated.\"]}}",
+        "{{{},\"reference_only\":{},\"reference_animation_seconds\":{},\"test_data\":{},\"repetition\":{},\"started_at\":{},\"warmup_seconds\":30,\"measure_seconds\":60,\"engine\":{engine},\"scene\":{},\"device\":{},\"environment\":{{\"backend\":{},\"surface_size\":[{},{}],\"render_size\":[{},{}],\"dynamic_resolution\":{},\"gpu_profiling\":{},\"vsync_requested\":{},\"presentation_mode\":null,\"refresh_hz\":{},\"refresh_limited_possible\":true,\"gpu\":{},\"driver\":{},\"driver_info\":{},\"thermal_status\":{}}},\"settings\":{},\"metrics\":{{{definitions}}},\"limitations\":[\"Application Last callback intervals, not display presentation FPS.\",\"No verified whole-frame GPU span; native named pass timings may overlap and must not be summed.\",\"CPU main/render scopes are wall envelopes, not pure busy or wait time. Pipelined worlds overlap.\",\"Actual swapchain mode unavailable; Android display refresh is captured by Java. AutoNoVsync may remain refresh limited.\",\"GPU preprocessing support: enum 0=None, 1=PreprocessingOnly, 2=Culling, 255=unavailable; timestamp feature bits 1=query, 2=inside passes, 4=inside encoders.\",\"Readiness requires scene/reflection readiness, no pending pipelines, stable pipeline count and 120 settled frames; pipeline count changes reset warmup or invalidate measurement.\",\"Device metadata/thermal snapshot captured before initialization; no continuous thermal series.\",\"No-effects hides six batches and local lights and skips their CPU updates; vegetation remains animated.\"]}}",
         identity(s),
         s.reference,
         if s.reference { "38.52" } else { "null" },

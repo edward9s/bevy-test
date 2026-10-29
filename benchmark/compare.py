@@ -77,6 +77,8 @@ def validate(files):
     require(sha is None or (isinstance(sha,str) and len(sha)==40 and all(c in '0123456789abcdef' for c in sha)), 'invalid commit SHA')
     for k in ('brand', 'model', 'android', 'fingerprint'):
         require(k in device and (device[k] is None or isinstance(device[k],str)), 'missing device '+k)
+    screen=device.get('display_mode_size')
+    require(screen is None or isinstance(screen,list) and len(screen)==2 and all(integer(v,1) for v in screen), 'invalid physical display mode size')
     require(env['backend'] in ('Vulkan','OpenGL ES','OpenGL','Metal','DX12','unavailable'), 'unknown backend')
     for k in ('surface_size','render_size'):
         require(isinstance(env[k],list) and len(env[k])==2 and all(integer(v,1) for v in env[k]), 'invalid '+k)
@@ -169,7 +171,7 @@ def condition(m):
     scene=[m['scene'][k] for k in ('id','seed','camera','animation','geometry_sha256','sources_sha256')]
     unknown = m['run_id'] if any(v is None or v=='' for v in hardware+scene) or e['backend']=='unavailable' or m['engine']['commit'] is None else None
     present=e['presentation_mode'] or 'unavailable:'+m['engine']['name']
-    return json.dumps([hardware,scene,m['engine']['build'],e['backend'],e['surface_size'],e['render_size'],e['dynamic_resolution'],e['vsync_requested'],present,e['refresh_hz'],e['thermal_status'],e['gpu_profiling'],m['preset_id'],unknown],sort_keys=True)
+    return json.dumps([hardware,scene,m['engine']['build'],e['backend'],e['surface_size'],e['render_size'],e['dynamic_resolution'],e['vsync_requested'],present,e['refresh_hz'],d.get('display_mode_size'),e['thermal_status'],e['gpu_profiling'],m['preset_id'],unknown],sort_keys=True)
 
 
 def aggregate(values):
@@ -202,6 +204,8 @@ def report(runs):
         if mixed: lines+=['**Incompatible versions/settings within an engine: aggregation refused.**','']
         if any(len(v)<3 or {r['metadata']['repetition'] for r in v}!={1,2,3} for v in by.values()):
             lines+=['Incomplete three-engine / three-repetition set; no formal ranking.','']
+        if m['device'].get('display_mode_size') is None:
+            lines+=['Physical display mode unavailable; screen conditions unverified, no formal ranking.','']
         if m['environment']['refresh_limited_possible']:
             lines+=['Presentation/compositor refresh limits may apply. These results do not establish uncapped renderer throughput.','']
         lines+=['| Metric | Filament | Godot | Bevy |','|---|---|---|---|']
@@ -210,7 +214,16 @@ def report(runs):
             cells=[aggregate([r['summary']['application'][field] for r in by[n]]) if not mixed else 'incompatible' for n in ENGINES]
             lines+=['| '+label+' | '+' | '.join(cells)+' |']
         for label in ('CPU Update Time','CPU Render Time'):
-            lines+=['| '+label+' | '+' | '.join('See engine scopes; not directly comparable' if by[n] else 'unavailable' for n in ENGINES)+' |']
+            update={'cpu_scene_ms','cpu_effects_ms','main_schedule'}
+            render={'cpu_submit_ms','cpu_wait_ms','filament_main','filament_backend','viewport_cpu','render_prepare','render_submit'}
+            cells=[]
+            for name in ENGINES:
+                available=False
+                for r in by[name]:
+                    names=update if label=='CPU Update Time' else render|{k for k in r['metadata']['metrics'] if k.endswith('/elapsed_cpu')}
+                    available |= any(any(f.get(k) for f in r['frames']) or any(x['metric']==k for x in r['metrics']) for k in names)
+                cells.append('See engine scopes; not directly comparable' if available else 'unavailable')
+            lines+=['| '+label+' | '+' | '.join(cells)+' |']
         for label,kind in [('GPU Frame Time','gpu_frame'),('GPU Slowest Pass','gpu_pass')]:
             cells=[]
             for name in ENGINES:
@@ -219,7 +232,7 @@ def report(runs):
                     for metric,d in r['metadata']['metrics'].items():
                         if d['kind']!=kind: continue
                         values=[float(x['value_ms']) for x in r['metrics'] if x['metric']==metric]
-                        if values: candidates.setdefault((metric,d['scope_id']),[]).append(statistics.mean(values))
+                        if values: candidates.setdefault((metric,d['scope_id'],d['source'],d['scope']),[]).append(statistics.mean(values))
                 if mixed: cells.append('incompatible')
                 elif not candidates: cells.append('unavailable')
                 elif kind=='gpu_frame' and len(candidates)>1: cells.append('different scopes; see details')

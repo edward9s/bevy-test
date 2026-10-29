@@ -76,6 +76,17 @@ class StatisticsTests(unittest.TestCase):
         self.assertIn('profiling overhead only',text)
         other['metadata']['settings']['bloom']=False
         self.assertIn('| no_shadows | 1 | incompatible settings |', '\n'.join(b.ab_report([base,other])))
+    def test_documented_example(self):
+        root=Path(__file__).resolve().parent
+        names=('metadata.json','summary.json','frames.csv','metrics.csv')
+        run=b.validate({name:(root/('example-'+name)).read_text() for name in names})
+        self.assertTrue(run['metadata']['test_data'])
+        self.assertEqual(run['summary']['application']['average_fps'],10)
+
+    def test_unavailable_cpu_rows(self):
+        md,_=b.report([b.validate(fixture())])
+        self.assertIn('| CPU Render Time | unavailable | unavailable | unavailable |',md)
+
     def test_json_duplicate_rejected(self):
         with self.assertRaises(ValueError): b.json_object('{"a":1,"a":2}')
 
