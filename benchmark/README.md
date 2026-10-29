@@ -87,7 +87,7 @@ APK contents are checked with `python3 benchmark/check_apk.py ENGINE path.apk --
 
 Before warmup, each real run saves an empty invalid snapshot marked in progress. On next launch, a complete snapshot left by a process interruption becomes an invalid result with its reason; partially written files remain excluded and are identified as incomplete in the results viewer. No journal/disk updates occur during measurement. Reference captures are separate and create no benchmark run journal.
 
-Committed `example-metadata.json`, `example-frames.csv`, `example-metrics.csv`, `example-summary.json`, and [example-report.md](example-report.md) are **synthetic fixtures**, not device scores. `examples.py` creates complete directly loadable run folders. Use one latest full ZIP per APK; overlapping exports are rejected for duplicate run IDs.
+Committed `fixtures/example-metadata.json`, `example-frames.csv`, `example-metrics.csv`, `example-summary.json`, and [example-report.md](fixtures/example-report.md) are **synthetic fixtures**, not device scores. `examples.py` creates complete directly loadable run folders. Use one latest full ZIP per APK; overlapping exports are rejected for duplicate run IDs.
 
 GPU Slowest Pass selects the largest median of per-run mean observations among named spans. Native spans may be nested/inclusive; they are not automatically leaf passes or whole GPU duration. Official results come from exported summaries. Showcase HUD counters in Godot/Bevy pause during measurement.
 

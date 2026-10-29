@@ -77,7 +77,7 @@ class StatisticsTests(unittest.TestCase):
         other['metadata']['settings']['bloom']=False
         self.assertIn('| no_shadows | 1 | incompatible settings |', '\n'.join(b.ab_report([base,other])))
     def test_documented_example(self):
-        root=Path(__file__).resolve().parent
+        root=Path(__file__).resolve().parent/'fixtures'
         names=('metadata.json','summary.json','frames.csv','metrics.csv')
         run=b.validate({name:(root/('example-'+name)).read_text() for name in names})
         self.assertTrue(run['metadata']['test_data'])
