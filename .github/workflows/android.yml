@@ -98,12 +98,6 @@ jobs:
         run: |
           bash scripts/package_android.sh
           python3 benchmark/check_apk.py Bevy build/BevyForest-test-arm64.apk --commit "$GITHUB_SHA"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: BevyForest-arm64
-          path: build/BevyForest-test-arm64.apk
-          if-no-files-found: error
-          retention-days: 7
       - name: Replace rolling test build
         env:
           GH_TOKEN: ${{ github.token }}
