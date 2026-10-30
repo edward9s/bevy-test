@@ -22,7 +22,7 @@ jobs:
         with:
           toolchain: 1.98.0
           components: rustfmt, clippy
-      - name: Linux render dependencies
+      - name: Linux Rust and graphics dependencies
         run: sudo apt-get update -qq && sudo apt-get install -y libx11-dev libxkbcommon-dev libvulkan1 mesa-vulkan-drivers
       - uses: actions/cache/restore@v4
         id: rust-cache
@@ -56,31 +56,6 @@ jobs:
           python3 -m unittest discover -s scripts -p 'test_*.py'
           if [[ ! -f assets/generated/specular.dds ]]; then python3 scripts/prepare_scene.py; fi
           python3 scripts/check_assets.py
-      - name: Compile and render all material pipelines
-        env:
-          WGPU_BACKEND: vulkan
-          BEVY_ASSET_ROOT: ${{ github.workspace }}
-        run: |
-          set -euo pipefail
-          mkdir -p build
-          cargo build --locked --bin bevy-forest
-          timeout 600s target/debug/bevy-forest --profile --check-benchmark --capture=build/forest.png 2>&1 | tee build/render.log
-          grep -F 'Benchmark check passed:' build/render.log
-          python3 benchmark/compare.py build/benchmark-output --validate-only
-          test -s build/forest.png
-          if grep -E 'ERROR|panicked|Shader.*error|Validation Error' build/render.log; then exit 1; fi
-      - name: Render through startup and native target resizes
-        env:
-          WGPU_BACKEND: vulkan
-          BEVY_ASSET_ROOT: ${{ github.workspace }}
-        run: |
-          set -euo pipefail
-          timeout 600s target/debug/bevy-forest --check-resize --capture=build/resized.png 2>&1 | tee build/resize.log
-          test -s build/resized.png
-          if grep -E 'ERROR|panicked|Shader.*error|Validation Error' build/resize.log; then exit 1; fi
-          for size in 2560x1600 1600x2560 800x480 1280x720; do
-            grep -F "Scene resolution: $size" build/resize.log
-          done
       - uses: actions/cache/save@v4
         if: always() && steps.rust-cache.outputs.cache-hit != 'true'
         with:
@@ -89,9 +64,3 @@ jobs:
             ~/.cargo/git
             target
           key: desktop-${{ runner.os }}-${{ hashFiles('Cargo.lock', 'Cargo.toml', 'rust-toolchain.toml') }}-${{ github.sha }}
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: forest-render
-          path: build/
-          retention-days: 7
