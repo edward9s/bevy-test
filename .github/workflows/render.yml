@@ -4,10 +4,10 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: bevy-check-${{ github.ref }}
-  cancel-in-progress: true
+  group: bevy-render-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
-  check:
+  render:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     env:
